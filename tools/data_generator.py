@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import nibabel as nib
 import brainsynth
@@ -111,12 +112,72 @@ class DataGenerator(torch.utils.data.Dataset):
             tuple[torch.Tensor, torch.Tensor]: A tuple containing the image and segmentation tensors.
         """
         return self.__getitem__(0)
-    
+
     def get_num_classes(self) -> int:
         """
         Returns the number of classes in the segmentation data.
         """
         return self.get_original_segmentation().max() + 1
+
+    def get_random_patch(
+        self,
+        image: torch.Tensor,
+        segmentation: torch.Tensor,
+        patch_size=[128, 128, 128],
+        delete_original=True,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns a random patch of data.
+        """
+
+        # Get the shape of the image
+        _, _, D, H, W = image.shape
+
+        isMostBackground = True
+
+        while isMostBackground:
+            # Get random coordinates for the patch
+            d = torch.randint(0, D - patch_size[0], (1,))
+            h = torch.randint(0, H - patch_size[1], (1,))
+            w = torch.randint(0, W - patch_size[2], (1,))
+
+            # Get the patch
+            image_patch = image[
+                :,
+                :,
+                d : d + patch_size[0],
+                h : h + patch_size[1],
+                w : w + patch_size[2],
+            ]
+            segmentation_patch = segmentation[
+                :,
+                :,
+                d : d + patch_size[0],
+                h : h + patch_size[1],
+                w : w + patch_size[2],
+            ]
+
+            # Check if the segmentation_patch is mostly background
+            # We consider the background to be 0
+            # If the patch is mostly background, we skip it
+
+            # Count the number of non-background pixels
+            num_non_background = (segmentation_patch != 0).sum().item()
+            # Count the total number of pixels in the patch
+            num_total_pixels = patch_size[0] * patch_size[1] * patch_size[2]
+            # Check if the patch is mostly background
+            # let's say that if the patch has less than 20% of non-background pixels, we consider it as mostly background
+            isMostBackground = num_non_background / num_total_pixels < 0.2
+            # If the patch is mostly background, we skip it
+            # If the patch is not mostly background, we break the loop
+            if not isMostBackground:
+                break
+        # Return the patch
+
+        if delete_original:
+            del image, segmentation
+
+        return image_patch, segmentation_patch
 
     # ---------------- test ----------------
 
@@ -137,7 +198,7 @@ if __name__ == "__main__":
 
     num_classes = data_gen.get_original_segmentation().max() + 1
 
-    model : AbstractUNet = UNet3D(
+    model: AbstractUNet = UNet3D(
         in_channels=1,
         out_channels=num_classes,
         final_sigmoid=True,
@@ -169,9 +230,23 @@ if __name__ == "__main__":
 
     for image, seg in data_gen:
         print(f"I'm in the loop")
-        prediction = model(image)
+        # prediction = model(image)
 
+        # print(f"Prediction shape: {prediction.shape}")
+
+        patch_size = [70, 70, 70]
+
+        image_patch, seg_patch = data_gen.get_random_patch(image, seg, patch_size, delete_original=False)
+        print(f"Image patch shape: {image_patch.shape}")
+        print(f"Segmentation patch shape: {seg_patch.shape}")
+
+        # save the image and its patch
+        toSave = nib.Nifti1Image(image_patch[0][0].cpu().numpy(), affine=np.eye(4))
+        nib.save(toSave, f"image_patch_{i}.nii.gz")
+        # save also the original image
+        toSave = nib.Nifti1Image(image[0][0].cpu().numpy(), affine=np.eye(4))
+        nib.save(toSave, f"image_{i}.nii.gz")
         # Compute the loss
-        loss = criterion(prediction, seg)
-        print(f"Loss: {loss.item()}")
+        # loss = criterion(prediction, seg)
+        # print(f"Loss: {loss.item()}")
 #        del image, seg

@@ -28,7 +28,7 @@ def get_device() -> torch.device:
 
 def get_data_generator(
     seg_path: str, batch_size: int, device: torch.device, out_size=[128, 128, 128]
-) -> brainsynth.Synthesizer:
+) -> DataGenerator:
     """
     Returns a data generator for the given segmentation path.
     the out_size is included only because my pc is not able to work with the full image.
@@ -44,6 +44,7 @@ def get_data_generator(
 
     return data_gen
 
+
 def get_model(data_gen: DataGenerator) -> AbstractUNet:
     """
     Returns the UNet3D model.
@@ -52,7 +53,6 @@ def get_model(data_gen: DataGenerator) -> AbstractUNet:
     model = UNet3D(
         in_channels=1,
         out_channels=data_gen.get_num_classes(),
-        f_maps=[32, 64, 128, 256],
         layer_order="gcr",
         num_groups=8,
         is_segmentation=True,
@@ -61,6 +61,24 @@ def get_model(data_gen: DataGenerator) -> AbstractUNet:
     )
 
     return model
+
+
+def get_loss():
+    """
+    Returns the loss criterion.
+    For readability, the loss is hardcoded here.
+    """
+    # Define your loss configuration
+    loss_config = {
+        "loss": {
+            "name": "DiceLoss",
+            "normalization": "sigmoid",
+            # additional parameters can go here if needed...
+        }
+    }
+
+    # Create the loss criterion
+    return get_loss_criterion(loss_config)
 
 
 if __name__ == "__main__":
@@ -74,14 +92,12 @@ if __name__ == "__main__":
         help="Path to the segmentation file (e.g., Ernie segmentation)",
     )
     args = parser.parse_args()
-    
 
     seg_path = args.seg_path
-   
-    #-----------------------------
+
+    # -----------------------------
     # End of the arguments
-    #-----------------------------
-    
+    # -----------------------------
 
     # Check the PyTorch version
     print("PyTorch version:", torch.__version__)
@@ -89,19 +105,51 @@ if __name__ == "__main__":
     # Get the device
     device = get_device()
     print(f"Using device: {device}")
-    
-    # Set Epochs and Batch size
-    num_epochs = 500
-    batch_size = 1
-    
+
+    # Set static parameters
+    num_epochs = 2
+    batch_size = 2
+    patch_size = [128, 128, 128]
+
     # Get the data generator
     data_gen = get_data_generator(
         seg_path=seg_path,
         batch_size=batch_size,
         device=device,
     )
-    
+
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
-    
-    
+
+    # Get the loss criterion
+    criterion = get_loss()
+
+    # Get the optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    # Training loop
+    for epoch in range(num_epochs):
+
+        model.train()
+
+        print(f"Epoch {epoch + 1}/{num_epochs}")
+
+        for image, seg in data_gen:
+            # Move data to the device
+            # Is this needed?
+            image = image.to(device)
+            seg = seg.to(device)
+
+            image_patch, seg_patch = data_gen.get_random_patch(image, seg)
+
+            optimizer.zero_grad()
+
+            # Forward pass
+            prediction = model(image_patch)
+
+            # Compute the loss
+            loss = criterion(prediction, seg_patch)
+            loss.backward()
+
+            optimizer.step()
+            print(f"Loss: {loss.item()}")
