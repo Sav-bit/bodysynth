@@ -1314,6 +1314,6 @@ class SaverioSynth(SynthBuilder):
 
     def build_output(self):
         return dict(
-            image=self.build_image(),
+            image = self.build_image(),
             **self.build_images(),
         )

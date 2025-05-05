@@ -1099,8 +1099,10 @@ class CenterFromString(BaseTransform):
             case "lh":
                 res = self.surface_bbox["lh"].mean(0)
             case "random":
-                raise NotImplementedError
-                # center =
+                # get the property of the tensor "self"
+                # print("Image size",self.size) #this is the size of the image
+                res = torch.rand(3, device=self.device) * self.size
+                res = torch.clamp(res, min=torch.tensor(0, device=self.device), max=self.size - 1)
             case "rh":
                 res = self.surface_bbox["rh"].mean(0)
 
