@@ -111,6 +111,12 @@ class DataGenerator(torch.utils.data.Dataset):
             tuple[torch.Tensor, torch.Tensor]: A tuple containing the image and segmentation tensors.
         """
         return self.__getitem__(0)
+    
+    def get_num_classes(self) -> int:
+        """
+        Returns the number of classes in the segmentation data.
+        """
+        return self.get_original_segmentation().max() + 1
 
     # ---------------- test ----------------
 

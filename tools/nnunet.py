@@ -2,6 +2,10 @@ import torch
 from unet3d.model import UNet3D
 
 
+"""_summary_
+This is a simple test script for testing the UNet3D model.
+"""
+
 model = UNet3D(
     in_channels=1,
     out_channels=1,

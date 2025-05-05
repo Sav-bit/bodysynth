@@ -8,6 +8,9 @@ import numpy as np
 from brainsynth.constants import ImageSettings
 
 
+"""
+This script is used to test the Sav synthesizer from brainsynth.
+"""
 
 def save_nifti_images(img, result, suffix):
     #get the affine
