@@ -6,6 +6,7 @@ from brainsynth.transforms import *
 from brainsynth import resources_dir
 from brainsynth.constants import IMAGE
 
+
 class SynthBuilder:
     def __init__(self, config) -> None:
         self.config = config
@@ -64,7 +65,8 @@ class SynthBuilder:
 
 
 class PredictionBuilder(SynthBuilder):
-    """Process and image called `image` and """
+    """Process an image called `image` and"""
+
     def build_state(self):
         return dict(
             in_size=Pipeline(
@@ -85,13 +87,13 @@ class PredictionBuilder(SynthBuilder):
                     align_corners=self.config.align_corners,
                 ),
             ),
-            crop_params = Pipeline(
+            crop_params=Pipeline(
                 SelectState("in_size"),
                 PipelineModule(
                     SpatialCropParameters,
                     self.config.out_size,
                     SelectState("out_center"),
-                )
+                ),
             ),
         )
 
@@ -105,7 +107,7 @@ class PredictionBuilder(SynthBuilder):
             PipelineModule(
                 PadTransform,
                 SelectState("crop_params", "pad"),
-            )
+            ),
         )
 
         self.surface_translation = SubPipeline(
@@ -125,7 +127,6 @@ class PredictionBuilder(SynthBuilder):
                 device=self.device,
             ),
         )
-
 
     def build_intensity_transform(self):
         self.intensity_normalization = IntensityNormalization()
@@ -298,10 +299,14 @@ class DefaultSynth(SynthBuilder):
             RandResolution,
             self.config.out_size,
             self.config.in_res,
+            res_sampler="RandClinicalSlice",
+            # res_sampler_kwargs = dict(slice_idx=2),
             photo_mode=self.config.photo_mode,
-            photo_spacing=SelectState("photo_spacing"),
-            photo_thickness=self.config.photo_thickness,
-            prob=0.75,
+            photo_res_sampler_kwargs=dict(
+                spacing=SelectState("photo_spacing"),
+                slice_thickness=self.config.photo_thickness,
+            ),
+            prob=1.0,
             device=self.device,
         )
 
@@ -421,14 +426,15 @@ class DefaultSynth(SynthBuilder):
 
     def build_output(self):
         return dict(
-            image_hires = self.build_image(),
-            image = Pipeline(
+            image_hires=self.build_image(),
+            image=Pipeline(
                 SelectOutput("image_hires"),
                 self.resolution_augmentation,
             ),
             **self.build_images(),
             **self.build_surfaces(),
         )
+
 
 class OnlySynth(DefaultSynth):
     def __init__(self, config: SynthesizerConfig) -> None:
@@ -513,8 +519,8 @@ class OnlySelect(OnlySynth):
 
     def build_output(self):
         return dict(
-            image_hires = self.build_image(),
-            image = Pipeline(
+            image_hires=self.build_image(),
+            image=Pipeline(
                 SelectOutput("image_hires"),
                 self.resolution_augmentation,
             ),
@@ -539,13 +545,16 @@ class OnlySelectNoSkullStrip(OnlySelect):
         self.skullstrip = IdentityTransform()
         self.intensity_normalization = IntensityNormalization()
 
+
 class OnlySelectNoSkullStripIso(OnlySelectNoSkullStrip):
     def build_resolution_transform(self):
         self.resolution_augmentation = IdentityTransform()
 
+
 class OnlySelectIso(OnlySelect):
     def build_resolution_transform(self):
         self.resolution_augmentation = IdentityTransform()
+
 
 class OnlySynthIsoT1w(OnlySynthIso):
     def build_intensity_transform(self):
@@ -587,6 +596,235 @@ class OnlySynthIsoT1w(OnlySynthIso):
             #     device=self.device,
             # ),
             self.resolution_augmentation(),
+            self.intensity_normalization,
+        )
+
+
+class CropSynth(SynthBuilder):
+    """Process an image called `image` and"""
+
+    def build_state(self):
+        return dict(
+            available_images=Pipeline(
+                SelectImage(),
+                ExtractDictKeys(),
+                unpack_inputs=False,
+            ),
+            in_size=Pipeline(
+                PipelineModule(
+                    SelectImage,
+                    # doesn't matter which is selected - all should be the same size!
+                    SelectState("available_images", 0),
+                ),
+                SpatialSize(),
+            ),
+            extracerebral_mask=Pipeline(
+                SelectImage("generation_labels_dist"),
+                PipelineModule(
+                    MaskFromLabelImage,
+                    labels=[0] + list(IMAGE.generation_labels.kmeans),
+                    device=self.device,
+                ),
+                skip_on_InputSelectorError=True,
+            ),
+            out_center=Pipeline(
+                ServeValue(self.config.out_center_str),
+                PipelineModule(
+                    CenterFromString,
+                    SelectState("in_size"),
+                    align_corners=self.config.align_corners,
+                ),
+            ),
+            crop_params=Pipeline(
+                SelectState("in_size"),
+                PipelineModule(
+                    SpatialCropParameters,
+                    self.config.out_size,
+                    SelectState("out_center"),
+                ),
+            ),
+        )
+
+    def build_intensity_transform(self):
+        self.skullstrip = PipelineModule(
+            SwitchTransform,
+            IdentityTransform(),
+            # skull strip
+            PipelineModule(
+                RandMaskRemove,
+                SelectState("extracerebral_mask"),
+            ),
+            # salt and pepper noise (e.g., like MP2RAGE)
+            PipelineModule(
+                RandSaltAndPepperNoise,
+                SelectState("extracerebral_mask"),
+                scale=255.0,
+                device=self.device,
+            ),
+            prob=(0.8, 0.1, 0.1),
+        )
+        self.intensity_normalization = IntensityNormalization()
+
+    def build_resolution_transform(self):
+        self.resolution_augmentation = IdentityTransform()
+        # PipelineModule(
+        #     RandResolution,
+        #     self.config.out_size,
+        #     self.config.in_res,
+        #     res_sampler = "RandClinicalSlice",
+        #     # res_sampler_kwargs = dict(slice_idx=2),
+        #     photo_mode=self.config.photo_mode,
+        #     photo_res_sampler_kwargs = dict(
+        #         spacing=SelectState("photo_spacing"),
+        #         slice_thickness=self.config.photo_thickness,
+        #     ),
+        #     prob=1.0,
+        #     device=self.device,
+        # )
+
+    def build_spatial_transform(self):
+        self.image_crop = SubPipeline(
+            PipelineModule(
+                SpatialCrop,
+                SelectState("in_size"),
+                SelectState("crop_params", "slices"),
+            ),
+            PipelineModule(
+                PadTransform,
+                SelectState("crop_params", "pad"),
+            ),
+        )
+
+        self.surface_translation = SubPipeline(
+            PipelineModule(
+                TranslationTransform,
+                SelectState("crop_params", "offset"),
+                invert=True,
+                device=self.device,
+            ),
+            CheckCoordsInside(self.config.out_size, device=self.device),
+        )
+
+        self.affine_adjuster = SubPipeline(
+            PipelineModule(
+                AdjustAffineToSpatialCrop,
+                SelectState("crop_params", "offset"),
+                device=self.device,
+            ),
+        )
+
+    def build_image(self):
+        return Pipeline(
+            # Synthesize image
+            SelectImage("generation_labels_dist"),
+            SynthesizeIntensityImage(
+                mu_low=25.0,
+                mu_high=200.0,
+                sigma_global_scale=4.0,
+                sigma_local_scale=2.5,
+                pv_sigma_range=[0.5, 1.2],
+                pv_tail_length=3.0,
+                pv_from_distances=False,
+                min_cortical_contrast=10.0,
+                photo_mode=self.config.photo_mode,
+                device=self.device,
+            ),
+            RandGammaTransform(prob=0.33),
+            self.skullstrip,
+            self.image_crop,  # Transform to output FOV
+            RandBiasfield(
+                self.config.out_size,
+                scale_min=0.01,
+                scale_max=0.03,
+                std_min=0.0,
+                std_max=0.3,
+                photo_mode=self.config.photo_mode,
+                prob=0.75,
+                device=self.device,
+            ),
+            # Small, local intensity variations
+            # RandBiasfield(
+            #     self.config.out_size,
+            #     scale_min=0.10,
+            #     scale_max=0.20,
+            #     std_min=0.0,
+            #     std_max=0.15,
+            #     photo_mode=self.config.photo_mode,
+            #     prob=0.5,
+            #     device=self.device,
+            # ),
+            # self.resolution_augmentation,
+            self.intensity_normalization,
+        )
+
+    def build_images(self):
+        return dict(
+            t1w=Pipeline(
+                SelectImage("t1w"),
+                self.skullstrip,
+                self.image_crop,
+                self.intensity_normalization,
+                skip_on_InputSelectorError=True,
+            ),
+        )
+
+    def build_output(self):
+        return dict(
+            image=self.build_image(),
+            **self.build_images(),
+            affine=Pipeline(
+                SelectAffine("generation_labels_dist"), self.affine_adjuster
+            ),
+        )
+
+
+class CropSelect(CropSynth):
+    def build_state(self):
+        state = super().build_state()
+
+        state["selectable_images"] = Pipeline(
+            SelectState("available_images"),
+            Intersection(self.config.selectable_images),
+            unpack_inputs=False,
+        )
+        return state
+
+    def build_image(self):
+        return Pipeline(
+            # Select one of the available (valid) images
+            PipelineModule(
+                SelectImage,
+                PipelineModule(
+                    RandomChoice,
+                    # equal probability of selecting each image
+                    SelectState("selectable_images"),
+                ),
+            ),
+            RandGammaTransform(prob=0.33),
+            self.skullstrip,
+            self.image_crop,  # Transform to output FOV
+            RandBiasfield(
+                self.config.out_size,
+                scale_min=0.01,
+                scale_max=0.03,
+                std_min=0.0,
+                std_max=0.3,
+                photo_mode=self.config.photo_mode,
+                prob=0.75,
+                device=self.device,
+            ),
+            # Small, local intensity variations
+            # RandBiasfield(
+            #     self.config.out_size,
+            #     scale_min=0.10,
+            #     scale_max=0.20,
+            #     std_min=0.0,
+            #     std_max=0.15,
+            #     photo_mode=self.config.photo_mode,
+            #     prob=0.5,
+            #     device=self.device,
+            # ),
+            # self.resolution_augmentation,
             self.intensity_normalization,
         )
 
@@ -920,6 +1158,7 @@ class XSubSynth(DefaultSynth):
 class XSubSynthIso(XSubSynth):
     def resolution_augmentation(self):
         return IdentityTransform()
+
 
 class SaverioSynth(SynthBuilder):
     def __init__(self, config: SynthesizerConfig) -> None:
