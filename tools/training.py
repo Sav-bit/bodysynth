@@ -27,7 +27,7 @@ def get_device() -> torch.device:
 
 
 def get_data_generator(
-    seg_path: str, batch_size: int, device: torch.device, out_size=[128, 128, 128]
+    seg_path: str, batch_size: int, device: torch.device
 ) -> DataGenerator:
     """
     Returns a data generator for the given segmentation path.
@@ -39,7 +39,7 @@ def get_data_generator(
         seg_dir=seg_path,
         batch_size=batch_size,
         device=device,
-        out_size=out_size,
+        # out_size=[128, 128, 128],  # Set to None for full image
     )
 
     return data_gen
