@@ -7,6 +7,7 @@ import torch
 import nibabel as nib
 import brainsynth
 from tools.data_generator import DataGenerator
+from unet3d.buildingblocks import DoubleConv
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 
@@ -53,11 +54,20 @@ def get_model(data_gen: DataGenerator) -> AbstractUNet:
     model = UNet3D(
         in_channels=1,
         out_channels=data_gen.get_num_classes(),
-        layer_order="gcr",
+        f_maps=(32, 64, 128, 256, 320),
+        basic_module=DoubleConv, 
+        layer_order='cgr',
         num_groups=8,
-        is_segmentation=True,
+        final_sigmoid=False,
+        conv_kernel_size=3,
+        pool_kernel_size=2,
         conv_padding=1,
-        is3d=True,
+        conv_upscale=2,
+        upsample='deconv',
+        num_levels=5,
+        dropout_prob=0.0,
+        is_segmentation=True,
+        is3d=True
     )
 
     return model
