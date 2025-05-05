@@ -29,6 +29,7 @@ LabelingScheme = namedtuple(
     (
         "brainseg",
         "brainseg_with_extracerebral",
+        "ernie"
     ),
 )
 
@@ -114,6 +115,7 @@ class ImageSettings:
             brainseg_with_extracerebral=tuple(
                 range(57)
             ),  # brainseg_with_extracerebral.lut
+            ernie=tuple(range(13)),  # ernie.lut
         )
 
         self.generation_labels = GenerationLabels(

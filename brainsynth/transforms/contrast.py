@@ -333,8 +333,29 @@ class IntensityNormalization(BaseTransform):
     def forward(self, image):
         C,*spatial_dims = image.shape
         ones = tuple(1 for _ in spatial_dims)
-        ql = image.reshape(C, -1).quantile(self.low, dim=-1)
-        qu = image.reshape(C, -1).quantile(self.high, dim=-1)
+        
+#        print('Image numel:', image.numel()) #With Ernie this is 64371880, and is too much
+# TODO: Come back here and check if this is still needed
+        
+        max_chuck = 10_000_000 # 10 millions
+        
+        if image.numel() > max_chuck:
+            print("Large tensor detected, processing in chunks.")
+
+            # Split the image into chunks to avoid memory issues
+            chunks = image.reshape(C, -1).split(max_chuck, dim=-1)
+            # Compute quantiles for each chunk and concatenate the results
+            ql_chunks = [chunk.quantile(self.low, dim=-1) for chunk in chunks]
+            qu_chunks = [chunk.quantile(self.high, dim=-1) for chunk in chunks]
+
+            # Average the quantiles across chunks
+            ql = torch.cat(ql_chunks).mean(dim=0)
+            qu = torch.cat(qu_chunks).mean(dim=0)
+            
+        else:
+##if we don't need, remove from TODO until here.
+            ql = image.reshape(C, -1).quantile(self.low, dim=-1)
+            qu = image.reshape(C, -1).quantile(self.high, dim=-1)
 
         image = image - ql.reshape(C, *ones)
         span = qu - ql

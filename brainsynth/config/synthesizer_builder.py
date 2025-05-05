@@ -920,3 +920,161 @@ class XSubSynth(DefaultSynth):
 class XSubSynthIso(XSubSynth):
     def resolution_augmentation(self):
         return IdentityTransform()
+
+class SaverioSynth(SynthBuilder):
+    def __init__(self, config: SynthesizerConfig) -> None:
+        super().__init__(config)
+
+    def initialize_spatial_transform(self):
+        self.nonlinear_transform = RandNonlinearTransform(
+            self.config.out_size,
+            scale_min=0.03,  # 0.10,
+            scale_max=0.06,  # 0.15,
+            std_max=4.0,
+            exponentiate_field=True,
+            grid=self.config.grid,
+            prob=1.0,
+            device=self.device,
+        )
+        self.linear_transform = RandLinearTransform(
+            max_rotation=15.0,
+            max_scale=0.2,
+            max_shear=0.2,
+            prob=1.0,
+            device=self.device,
+        )
+
+    def build_state(self):
+        return dict(
+            # available images
+            available_images=Pipeline(
+                SelectImage(),
+                ExtractDictKeys(),
+                unpack_inputs=False,
+            ),
+            # the size of the input image(s)
+            # (this should be an image that is always available)
+            in_size=Pipeline(
+                PipelineModule(
+                    SelectImage,
+                    # doesn't matter which is selected - all should be the same size!
+                    SelectState("available_images", 0),
+                ),
+                SpatialSize(),
+            ),
+            # where to center the (output) FOV in the input image space
+            out_center=Pipeline(
+                ServeValue(self.config.out_center_str),
+                PipelineModule(
+                    CenterFromString,
+                    SelectState("in_size"),
+                    align_corners=self.config.align_corners,
+                ),
+                # RandTranslationTransform(
+                #     x_range=[-10, 10],
+                #     y_range=[-10, 10],
+                #     z_range=[-10, 10],
+                #     prob=0.5,
+                #     device=self.device,
+                # ),
+            ),
+            # the deformed grid
+            resampling_grid=Pipeline(
+                ServeValue(self.config.centered_grid),
+                self.nonlinear_transform,
+                self.linear_transform,
+                PipelineModule(
+                    TranslationTransform,
+                    SelectState("out_center"),
+                    device=self.device,
+                ),
+            ),
+        )
+
+    def build_spatial_transform(self):
+        self.image_deformation = SubPipeline(
+            PipelineModule(
+                GridSample,
+                SelectState("resampling_grid"),
+                SelectState("in_size"),
+            ),
+        )
+
+    def build_intensity_transform(self):
+        self.intensity_normalization = IntensityNormalization()
+
+    def build_resolution_transform(self):
+        # self.resolution_augmentation = PipelineModule(
+        #     RandResolution,
+        #     self.config.out_size,
+        #     self.config.in_res,
+        #     prob=0.75,
+        #     device=self.device,
+        # )
+        self.resolution_augmentation = IdentityTransform()
+
+    def build_image(self):
+        return Pipeline(
+            # Synthesize image
+            SelectImage("segmentation"),
+            SynthesizeIntensityImage(
+                mu_low=25.0,
+                mu_high=200.0,
+                sigma_global_scale=4.0,
+                sigma_local_scale=2.5,
+                pv_sigma_range=[0.5, 1.2],
+                pv_tail_length=3.0,
+                pv_from_distances=False,
+                min_cortical_contrast=10.0,
+                photo_mode=self.config.photo_mode,
+                device=self.device,
+            ),
+            RandGammaTransform(prob=0.33),
+            self.image_deformation,  # Transform to output FOV
+            RandBiasfield(
+                self.config.out_size,
+                scale_min=0.01,
+                scale_max=0.03,
+                std_min=0.0,
+                std_max=0.3,
+                photo_mode=self.config.photo_mode,
+                prob=0.75,
+                device=self.device,
+            ),
+            # Small, local intensity variations
+            # RandBiasfield(
+            #     self.config.out_size,
+            #     scale_min=0.10,
+            #     scale_max=0.20,
+            #     std_min=0.0,
+            #     std_max=0.15,
+            #     photo_mode=self.config.photo_mode,
+            #     prob=0.5,
+            #     device=self.device,
+            # ),
+            self.resolution_augmentation,
+            self.intensity_normalization,
+        )
+
+    def build_images(self):
+        return dict(
+            t1w=Pipeline(
+                SelectImage("t1w"),
+                self.image_deformation,
+                self.intensity_normalization,
+                # This pipeline is allowed to fail if the input is not found
+                skip_on_InputSelectorError=True,
+            ),
+            seg=Pipeline(
+                SelectImage("segmentation"),
+                self.image_deformation,
+                OneHotEncoding(self.config.segmentation_num_labels),
+                skip_on_InputSelectorError=True,
+            ),
+        )
+
+    def build_output(self):
+        return dict(
+            image = self.build_image(),
+            **self.build_images(),
+        )

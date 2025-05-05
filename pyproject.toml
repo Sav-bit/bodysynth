@@ -31,3 +31,7 @@ brainsynth = [
     "constants/lut/brainseg.lut",
     "constants/lut/brainseg_with_extracerebral.lut",
 ]
+
+[tool.setuptools.packages.find]
+include = ["brainsynth*", "unet3d*"]
+
