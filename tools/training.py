@@ -40,6 +40,8 @@ def get_data_generator(
         seg_dir=seg_path,
         batch_size=batch_size,
         device=device,
+        patch_size=[128, 128, 128],  # Set to None for full image
+        padding=22,
         # out_size=[128, 128, 128],  # Set to None for full image
     )
 

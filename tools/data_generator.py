@@ -17,16 +17,27 @@ Remember in this file:
 
 class DataGenerator(torch.utils.data.Dataset):
     def __init__(
-        self, seg_dir, batch_size=1, out_center_str="image", out_size=None, device="cpu"
+        self,
+        seg_dir,
+        batch_size=1,
+        out_center_str="image",
+        patch_size=[128, 128, 128],
+        padding=22,
+        device="cpu",
     ):
         self.seg_dir = seg_dir
         self.device = device
         self.batch_size = batch_size
+        self.patch_size = patch_size
+        self.padding = padding
 
         self.original_data = self.load_data()
 
-        if out_size is None:
-            out_size = self.get_out_size()
+        # Since the memory is not enough to load the full image, we need to set the out_size
+        # The idea here is to set the out_size as a little bit bigger than the patch size
+        # so we avoid having the black border around the image in case of non linear transformation
+        # then we will crop it to the patch size
+        out_size = [x + padding for x in patch_size]
 
         self.synth = brainsynth.Synthesizer(
             brainsynth.config.SynthesizerConfig(
@@ -38,7 +49,7 @@ class DataGenerator(torch.utils.data.Dataset):
             )
         )
 
-    def get_out_size(self) -> list[int]:
+    def _get_out_size(self) -> list[int]:
 
         segmentation_size = self.get_original_segmentation().shape[1:]
 
@@ -81,13 +92,15 @@ class DataGenerator(torch.utils.data.Dataset):
         """
         Returns:
             tuple[torch.Tensor, torch.Tensor]: A tuple containing the image and segmentation tensors.
-            note: both tensors have size (1, D, H, W)
+            note: both tensors have size (1, C, D, H, W)
         """
 
         if not 0 <= index < self.batch_size:
             raise IndexError("Index out of range")
 
-        result = self.synth(self.original_data, unpack=False)
+        to_synth = dict(segmentation=self.get_random_patch())
+
+        result = self.synth(to_synth, unpack=False)
 
         # This has size (1, C, D, H, W) where C is the number of channels
         # 1 in this case
@@ -95,6 +108,24 @@ class DataGenerator(torch.utils.data.Dataset):
 
         # This has size  (1, C, D, H, W)
         segmentation = result["seg"].to(torch.int64).unsqueeze(0)
+
+        # Crop the image to the patch size
+        image = image[
+            :,
+            :,
+            self.padding // 2 : -self.padding // 2,
+            self.padding // 2 : -self.padding // 2,
+            self.padding // 2 : -self.padding // 2,
+        ]
+
+        # Crop the segmentation to the patch size
+        segmentation = segmentation[
+            :,
+            :,
+            self.padding // 2 : -self.padding // 2,
+            self.padding // 2 : -self.padding // 2,
+            self.padding // 2 : -self.padding // 2,
+        ]
 
         return image, segmentation
 
@@ -119,65 +150,54 @@ class DataGenerator(torch.utils.data.Dataset):
         """
         return self.get_original_segmentation().max() + 1
 
-    def get_random_patch(
-        self,
-        image: torch.Tensor,
-        segmentation: torch.Tensor,
-        patch_size=[128, 128, 128],
-        delete_original=True,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Returns a random patch of data.
-        """
+    def get_random_patch(self) -> torch.tensor:
+
+        seg = self.get_original_segmentation()
 
         # Get the shape of the image
-        _, _, D, H, W = image.shape
+        _, D, H, W = seg.shape
 
         isMostBackground = True
 
+        # calculate the total patch size
+        # patch size + padding
+        total_patch_size = [x + self.padding for x in self.patch_size]
+
         while isMostBackground:
             # Get random coordinates for the patch
-            d = torch.randint(0, D - patch_size[0], (1,))
-            h = torch.randint(0, H - patch_size[1], (1,))
-            w = torch.randint(0, W - patch_size[2], (1,))
+            d = torch.randint(0, D - total_patch_size[0], (1,))
+            h = torch.randint(0, H - total_patch_size[1], (1,))
+            w = torch.randint(0, W - total_patch_size[2], (1,))
 
-            # Get the patch
-            image_patch = image[
+            segmentation_patch = seg[
                 :,
-                :,
-                d : d + patch_size[0],
-                h : h + patch_size[1],
-                w : w + patch_size[2],
-            ]
-            segmentation_patch = segmentation[
-                :,
-                :,
-                d : d + patch_size[0],
-                h : h + patch_size[1],
-                w : w + patch_size[2],
+                d : d + total_patch_size[0],
+                h : h + total_patch_size[1],
+                w : w + total_patch_size[2],
             ]
 
             # Check if the segmentation_patch is mostly background
-            # We consider the background to be 0
-            # If the patch is mostly background, we skip it
+            isMostBackground = self._is_mostly_background(
+                segmentation_patch,
+                threshold=0.2,
+            )
 
-            # Count the number of non-background pixels
-            num_non_background = (segmentation_patch != 0).sum().item()
-            # Count the total number of pixels in the patch
-            num_total_pixels = patch_size[0] * patch_size[1] * patch_size[2]
-            # Check if the patch is mostly background
-            # let's say that if the patch has less than 20% of non-background pixels, we consider it as mostly background
-            isMostBackground = num_non_background / num_total_pixels < 0.2
-            # If the patch is mostly background, we skip it
-            # If the patch is not mostly background, we break the loop
-            if not isMostBackground:
-                break
-        # Return the patch
+        return segmentation_patch
 
-        if delete_original:
-            del image, segmentation
-
-        return image_patch, segmentation_patch
+    def _is_mostly_background(
+        self,
+        patch: torch.Tensor,
+        threshold=0.2,
+    ) -> bool:
+        """
+        Check if the patch is mostly background
+        """
+        # Count the number of non-background pixels
+        num_non_background = (patch != 0).sum().item()
+        # Count the total number of pixels in the patch
+        num_total_pixels = patch.numel()
+        # Check if the patch is mostly background
+        return num_non_background / num_total_pixels < threshold
 
     # ---------------- test ----------------
 
@@ -191,7 +211,8 @@ if __name__ == "__main__":
         seg_dir="/Users/sav/Documents/Progetti DTU/medical-segmentator/ernie_less_dim.nii.gz",
         batch_size=1,
         device=device,
-        out_size=[128, 128, 128],
+        patch_size=[128, 128, 128],
+        padding=22,
     )
 
     i = 0
@@ -234,19 +255,12 @@ if __name__ == "__main__":
 
         # print(f"Prediction shape: {prediction.shape}")
 
-        patch_size = [70, 70, 70]
+        print(f"Image shape: {image.shape}")
+        print(f"Segmentation shape: {seg.shape}")
 
-        image_patch, seg_patch = data_gen.get_random_patch(image, seg, patch_size, delete_original=False)
-        print(f"Image patch shape: {image_patch.shape}")
-        print(f"Segmentation patch shape: {seg_patch.shape}")
-
-        # save the image and its patch
-        toSave = nib.Nifti1Image(image_patch[0][0].cpu().numpy(), affine=np.eye(4))
-        nib.save(toSave, f"image_patch_{i}.nii.gz")
-        # save also the original image
-        toSave = nib.Nifti1Image(image[0][0].cpu().numpy(), affine=np.eye(4))
+        # Save the image
+        toSave = image[0][0].cpu().numpy()
+        toSave = nib.Nifti1Image(toSave, affine=None)
         nib.save(toSave, f"image_{i}.nii.gz")
-        # Compute the loss
-        # loss = criterion(prediction, seg)
-        # print(f"Loss: {loss.item()}")
-#        del image, seg
+
+    print("Out of the loop...")
