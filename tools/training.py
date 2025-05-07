@@ -119,8 +119,8 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 2
-    batch_size = 2
+    num_epochs = 5
+    batch_size = 1
     patch_size = [128, 128, 128]
 
     # Get the data generator
@@ -152,15 +152,13 @@ if __name__ == "__main__":
             image = image.to(device)
             seg = seg.to(device)
 
-            image_patch, seg_patch = data_gen.get_random_patch(image, seg)
-
             optimizer.zero_grad()
 
             # Forward pass
-            prediction = model(image_patch)
+            prediction = model(image)
 
             # Compute the loss
-            loss = criterion(prediction, seg_patch)
+            loss = criterion(prediction, seg)
             loss.backward()
 
             optimizer.step()
