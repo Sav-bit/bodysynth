@@ -56,7 +56,7 @@ def get_model(data_gen: DataGenerator) -> AbstractUNet:
     model = UNet3D(
         in_channels=1,
         out_channels=data_gen.get_num_classes(),
-        f_maps=(32, 64, 128, 256, 320),
+        f_maps=(32, 64, 128, 256),
         basic_module=DoubleConv, 
         layer_order='cgr',
         num_groups=8,
