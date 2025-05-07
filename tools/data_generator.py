@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import nibabel as nib
 import brainsynth
+from tools.util import save_representation
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 
@@ -258,9 +259,13 @@ if __name__ == "__main__":
         print(f"Image shape: {image.shape}")
         print(f"Segmentation shape: {seg.shape}")
 
-        # Save the image
-        toSave = image[0][0].cpu().numpy()
-        toSave = nib.Nifti1Image(toSave, affine=None)
-        nib.save(toSave, f"image_{i}.nii.gz")
+        save_representation(
+            image=image,
+            title=f"image_{i}",
+        )
+        save_representation(
+            image=seg,
+            title=f"segmentation_{i}",
+        )
 
     print("Out of the loop...")
