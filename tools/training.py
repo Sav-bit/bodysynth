@@ -124,7 +124,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 5
+    num_epochs = 50 # How many epochs to train
     batch_size = 1 #How many images to load at once
     num_batches_per_epoch = 1 # How many batches to load per epoch
     patch_size = [128, 128, 128]
