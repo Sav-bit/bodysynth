@@ -53,14 +53,14 @@ def get_data_generator(
     return loader
 
 
-def get_model(data_gen: DataGenerator) -> AbstractUNet:
+def get_model(data_gen: DataLoader) -> AbstractUNet:
     """
     Returns the UNet3D model.
     For readability, the network architecture is hardcoded here.
     """
     model = UNet3D(
         in_channels=1,
-        out_channels=data_gen.get_num_classes(),
+        out_channels=data_gen.dataset.get_num_classes(),
         f_maps=(32, 64, 128, 256),
         basic_module=DoubleConv, 
         layer_order='cgr',
