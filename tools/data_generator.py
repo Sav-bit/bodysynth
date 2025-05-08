@@ -254,6 +254,19 @@ if __name__ == "__main__":
 
             print(f"Image shape: {images.shape}")
             print(f"Segmentation shape: {segs.shape}")
+            for j in range(images.shape[0]):
+                image = images[j]
+                seg = segs[j]
+                
+                # Save the image and segmentation
+                save_representation(
+                    image=image,
+                    title=f"image_{i}_{count_batches}_{j}",
+                )
+                save_representation(
+                    image=seg,
+                    title=f"segmentation_{i}_{count_batches}_{j}",
+                )
 
             # save_representation(
             #     image=image,

@@ -62,7 +62,6 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
         in_channels=1,
         out_channels=data_gen.dataset.get_num_classes(),
         f_maps=(32, 64, 128, 256),
-        basic_module=DoubleConv, 
         layer_order='cgr',
         num_groups=8,
         final_sigmoid=False,
@@ -146,6 +145,8 @@ if __name__ == "__main__":
     # Get the optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
+    losses = []
+    
     # Training loop
     for epoch in range(num_epochs):
 
@@ -166,4 +167,9 @@ if __name__ == "__main__":
             loss.backward()
 
             optimizer.step()
-            print(f"Loss: {loss.item()}")
+            curr_loss = loss.item()
+            losses.append(curr_loss)
+            print(f"Batch loss: {curr_loss:.4f}")
+        
+    
+            
