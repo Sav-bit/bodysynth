@@ -6,6 +6,7 @@ import argparse
 from itertools import islice
 import torch
 from tools.data_generator import DataGenerator
+from unet3d import utils
 from unet3d.buildingblocks import DoubleConv
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
@@ -28,12 +29,16 @@ def get_device() -> torch.device:
 
 
 def get_data_generator(
-    seg_path: str, batch_size: int, device: torch.device, num_workers: int 
+    seg_path: str, batch_size: int, device: torch.device, num_workers: int
 ) -> DataLoader:
     """
-    Returns a data generator for the given segmentation path.
-    the out_size is included only because my pc is not able to work with the full image.
-    on the hpc it should not be set
+    Returns a data loader for the given segmentation path.
+
+    Args:
+        seg_path (str): Path to the segmentation file (e.g Ernie segmentation).
+        batch_size (int): Batch size for the data loader.
+        device (torch.device): Device to be used for training.
+        num_workers (int): Number of workers for the data loader.
     """
 
     data_gen = DataGenerator(
@@ -42,7 +47,7 @@ def get_data_generator(
         patch_size=[128, 128, 128],
         padding=22,
     )
-    
+
     loader = DataLoader(
         data_gen,
         batch_size=batch_size,
@@ -61,19 +66,19 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     model = UNet3D(
         in_channels=1,
         out_channels=data_gen.dataset.get_num_classes(),
-        f_maps=(32, 64, 128, 256),
-        layer_order='cgr',
+        f_maps=(32, 64, 128, 256, 512),
+        layer_order="cgr",
         num_groups=8,
         final_sigmoid=False,
         conv_kernel_size=3,
         pool_kernel_size=2,
         conv_padding=1,
         conv_upscale=2,
-        upsample='deconv',
+        upsample="deconv",
         num_levels=5,
         dropout_prob=0.0,
         is_segmentation=True,
-        is3d=True
+        is3d=True,
     )
 
     return model
@@ -123,9 +128,9 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 50 # How many epochs to train
-    batch_size = 1 #How many images to load at once
-    num_batches_per_epoch = 1 # How many batches to load per epoch
+    num_epochs = 50  # How many epochs to train
+    batch_size = 1  # How many images to load at once
+    num_batches_per_epoch = 1  # How many batches to load per epoch
     patch_size = [128, 128, 128]
 
     # Get the data generator
@@ -146,16 +151,15 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     losses = []
-    
+
     # Training loop
     for epoch in range(num_epochs):
 
         model.train()
 
         print(f"Epoch {epoch + 1}/{num_epochs}")
-        #The data generator is infinite, so we need to limit the number of batches
+        # The data generator is infinite, so we need to limit the number of batches
         for images, segs in islice(data_gen, num_batches_per_epoch):
-            
 
             optimizer.zero_grad()
 
@@ -170,6 +174,15 @@ if __name__ == "__main__":
             curr_loss = loss.item()
             losses.append(curr_loss)
             print(f"Batch loss: {curr_loss:.4f}")
-        
-    
-            
+
+        if epoch % 50 == 0:
+            checkpoint_dir = "./checkpoints"
+            state = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": loss.item(),
+                # any other info
+            }
+            is_best = False
+            utils.save_checkpoint(state, False, checkpoint_dir)
