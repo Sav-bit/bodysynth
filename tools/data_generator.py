@@ -1,14 +1,15 @@
-import numpy as np
+from itertools import islice
 import torch
 import nibabel as nib
 import brainsynth
 from tools.util import save_representation
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
+from torch.utils.data import DataLoader
 
 """
 Remember in this file:
-- N : batch size (It's always 1)
+- N : batch size
 - C : channels
 - D : depth
 - H : height
@@ -16,11 +17,10 @@ Remember in this file:
 """
 
 
-class DataGenerator(torch.utils.data.Dataset):
+class DataGenerator(torch.utils.data.IterableDataset):
     def __init__(
         self,
         seg_dir,
-        batch_size=1,
         out_center_str="image",
         patch_size=[128, 128, 128],
         padding=22,
@@ -28,7 +28,6 @@ class DataGenerator(torch.utils.data.Dataset):
     ):
         self.seg_dir = seg_dir
         self.device = device
-        self.batch_size = batch_size
         self.patch_size = patch_size
         self.padding = padding
 
@@ -74,61 +73,48 @@ class DataGenerator(torch.utils.data.Dataset):
         data = torch.tensor(data, device=self.device, dtype=torch.int64).unsqueeze(0)
         return dict(segmentation=data)
 
-    def __len__(self) -> int:
-        """
-        Returns:
-            int: The number of samples in the dataset.
-        """
-        # The dataset is not iterable, so we return 1
-        # to avoid errors in the DataLoader
-        return self.batch_size
-
     def get_original_segmentation(self) -> torch.Tensor:
         """
         Returns the original segmentation data.
         """
         return self.original_data["segmentation"]
 
-    def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
+    def __iter__(self):
         """
-        Returns:
-            tuple[torch.Tensor, torch.Tensor]: A tuple containing the image and segmentation tensors.
-            note: both tensors have size (1, C, D, H, W)
+        Returns an iterator that yields batches of data.
         """
+        while True:
+            # Get a random patch from the original segmentation
+            # Then we will use the synthesizer to generate a new image from that patch
+            to_synth = dict(segmentation=self.get_random_patch())
 
-        if not 0 <= index < self.batch_size:
-            raise IndexError("Index out of range")
+            result = self.synth(to_synth, unpack=False)
 
-        to_synth = dict(segmentation=self.get_random_patch())
+            # This has size (C, D, H, W) where C is the number of channels, 1 in the image case
+            image = result["image"]
 
-        result = self.synth(to_synth, unpack=False)
+            # This has size  (C, D, H, W)
+            segmentation = result["seg"].to(torch.int64)
 
-        # This has size (1, C, D, H, W) where C is the number of channels
-        # 1 in this case
-        image = result["image"].unsqueeze(0)
+            sl = slice(self.padding // 2, -self.padding // 2)
 
-        # This has size  (1, C, D, H, W)
-        segmentation = result["seg"].to(torch.int64).unsqueeze(0)
+            # Crop the image to the patch size
+            image = image[
+                :,
+                sl,
+                sl,
+                sl,
+            ]
 
-        # Crop the image to the patch size
-        image = image[
-            :,
-            :,
-            self.padding // 2 : -self.padding // 2,
-            self.padding // 2 : -self.padding // 2,
-            self.padding // 2 : -self.padding // 2,
-        ]
+            # Crop the segmentation to the patch size
+            segmentation = segmentation[
+                :,
+                sl,
+                sl,
+                sl,
+            ]
 
-        # Crop the segmentation to the patch size
-        segmentation = segmentation[
-            :,
-            :,
-            self.padding // 2 : -self.padding // 2,
-            self.padding // 2 : -self.padding // 2,
-            self.padding // 2 : -self.padding // 2,
-        ]
-
-        return image, segmentation
+            yield image, segmentation
 
     def __repr__(self) -> str:
         """
@@ -210,10 +196,16 @@ if __name__ == "__main__":
     # instantiate the data generator
     data_gen = DataGenerator(
         seg_dir="/Users/sav/Documents/Progetti DTU/medical-segmentator/ernie_less_dim.nii.gz",
-        batch_size=1,
         device=device,
         patch_size=[128, 128, 128],
         padding=22,
+    )
+    
+    loader = DataLoader(
+        data_gen,
+        batch_size=2,
+        num_workers=2,
+        pin_memory=True,
     )
 
     i = 0
@@ -249,23 +241,30 @@ if __name__ == "__main__":
 
     # Create the loss criterion
     criterion = get_loss_criterion(loss_config)
+    
+    num_batches_per_epoch = 3
+    num_epochs = 2
 
-    for image, seg in data_gen:
-        print(f"I'm in the loop")
-        # prediction = model(image)
+    for i in range(num_epochs):
+        print(f"Iteration {i + 1}")
+        
+        count_batches = 0
+        for images, segs in islice(loader, num_batches_per_epoch):
+            print(f"I'm in the loop")
 
-        # print(f"Prediction shape: {prediction.shape}")
+            print(f"Image shape: {images.shape}")
+            print(f"Segmentation shape: {segs.shape}")
 
-        print(f"Image shape: {image.shape}")
-        print(f"Segmentation shape: {seg.shape}")
-
-        save_representation(
-            image=image,
-            title=f"image_{i}",
-        )
-        save_representation(
-            image=seg,
-            title=f"segmentation_{i}",
-        )
+            # save_representation(
+            #     image=image,
+            #     title=f"image_{i}",
+            # )
+            # save_representation(
+            #     image=seg,
+            #     title=f"segmentation_{i}",
+            # )
+            count_batches += 1
+            
+        print(f"Number of batches in this epoch: {count_batches}")
 
     print("Out of the loop...")

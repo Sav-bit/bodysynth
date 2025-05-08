@@ -10,7 +10,7 @@ import nibabel as nib
 import os
 
 
-def save_representation(image: torch.Tensor, title: str, path: str = None) -> None:
+def save_representation(image: torch.Tensor, title: str, path: str = None, image_index : int = 0) -> None:
     """
     Save a tensor representation to a file.
     Args:
@@ -26,7 +26,9 @@ def save_representation(image: torch.Tensor, title: str, path: str = None) -> No
 
     # If it's a 5D tensor, we need to squeeze the batch size
     if image.ndim == 5:
-        image = image.squeeze(0)
+        # If the batch size is 1, we can squeeze it
+        # If the batch size is > 1, we need to select the user defined image
+        image = image.squeeze(0) if image.shape[0] == 1 else image[image_index]
 
     # If it's a 4D tensor, we need check the first dimension (the channels):
     # If it's a 1, we need to squeeze it

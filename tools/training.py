@@ -3,19 +3,19 @@ This is the script for training the UNet3D model.
 """
 
 import argparse
+from itertools import islice
 import torch
-import nibabel as nib
-import brainsynth
 from tools.data_generator import DataGenerator
 from unet3d.buildingblocks import DoubleConv
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
+from torch.utils.data import DataLoader
 
 
 def get_device() -> torch.device:
     """
     Returns the device to be used for training as a torch.device.
-    MPS is disabled because it throws error for the convolution 😡
+    MPS is disabled because it throws error for the convolution on my stupid pc 😡
     """
     # if torch.backends.mps.is_available():
     #     print("MPS is available")
@@ -28,8 +28,8 @@ def get_device() -> torch.device:
 
 
 def get_data_generator(
-    seg_path: str, batch_size: int, device: torch.device
-) -> DataGenerator:
+    seg_path: str, batch_size: int, device: torch.device, num_workers: int 
+) -> DataLoader:
     """
     Returns a data generator for the given segmentation path.
     the out_size is included only because my pc is not able to work with the full image.
@@ -38,14 +38,19 @@ def get_data_generator(
 
     data_gen = DataGenerator(
         seg_dir=seg_path,
-        batch_size=batch_size,
         device=device,
-        patch_size=[128, 128, 128],  # Set to None for full image
+        patch_size=[128, 128, 128],
         padding=22,
-        # out_size=[128, 128, 128],  # Set to None for full image
+    )
+    
+    loader = DataLoader(
+        data_gen,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=True,
     )
 
-    return data_gen
+    return loader
 
 
 def get_model(data_gen: DataGenerator) -> AbstractUNet:
@@ -120,7 +125,8 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 5
-    batch_size = 1
+    batch_size = 1 #How many images to load at once
+    num_batches_per_epoch = 1 # How many batches to load per epoch
     patch_size = [128, 128, 128]
 
     # Get the data generator
@@ -128,6 +134,7 @@ if __name__ == "__main__":
         seg_path=seg_path,
         batch_size=batch_size,
         device=device,
+        num_workers=2,
     )
 
     # Get the model
@@ -146,19 +153,19 @@ if __name__ == "__main__":
 
         print(f"Epoch {epoch + 1}/{num_epochs}")
 
-        for image, seg in data_gen:
-            # Move data to the device
-            # Is this needed?
-            image = image.to(device)
-            seg = seg.to(device)
+        for images, segs in islice(data_gen, num_batches_per_epoch):
+            
+            #Check the images and segs device
+            print(f"Images device: {images.device}")
+            print(f"Segs device: {segs.device}")
 
             optimizer.zero_grad()
 
             # Forward pass
-            prediction = model(image)
+            prediction = model(images)
 
             # Compute the loss
-            loss = criterion(prediction, seg)
+            loss = criterion(prediction, segs)
             loss.backward()
 
             optimizer.step()
