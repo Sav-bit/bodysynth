@@ -1,4 +1,5 @@
 from itertools import islice
+from typing import Tuple
 import torch
 import nibabel as nib
 import brainsynth
@@ -31,7 +32,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         self.patch_size = patch_size
         self.padding = padding
 
-        self.original_data = self.load_data()
+        self.original_data, self.affine = self.load_data()
 
         # Since the memory is not enough to load the full image, we need to set the out_size
         # The idea here is to set the out_size as a little bit bigger than the patch size
@@ -60,18 +61,19 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         return out_size
 
-    def load_data(self) -> dict[str, torch.Tensor]:
+    def load_data(self) -> Tuple[dict[str, torch.Tensor], torch.Tensor]:
         """
         Loads the segmentation data from the specified NIfTI file.
 
         Returns:
             dict[str, torch.Tensor]: A dictionary with key "segmentation"
             and its value as a 4D torch.Tensor (1, D, H, W).
+            torch.Tensor: The affine transformation matrix of the NIfTI file.
         """
         img = nib.load(self.seg_dir)
         data = img.get_fdata()
         data = torch.tensor(data, device=self.device, dtype=torch.int64).unsqueeze(0)
-        return dict(segmentation=data)
+        return dict(segmentation=data), img.affine
 
     def get_original_segmentation(self) -> torch.Tensor:
         """
@@ -171,6 +173,13 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         return segmentation_patch
 
+    def get_affine(self) -> torch.Tensor:
+        """
+        Returns the affine transformation matrix of the NIfTI file.
+        """
+        return self.affine
+    
+
     def _is_mostly_background(
         self,
         patch: torch.Tensor,
@@ -200,7 +209,7 @@ if __name__ == "__main__":
         patch_size=[128, 128, 128],
         padding=22,
     )
-    
+
     loader = DataLoader(
         data_gen,
         batch_size=2,
@@ -239,15 +248,29 @@ if __name__ == "__main__":
         }
     }
 
+    save_representation(
+        image=data_gen.get_random_patch(),
+        title="Random_patch",
+        affine_matrix=data_gen.get_affine(),
+    )
+
+    save_representation(
+        image=data_gen.get_original_segmentation(),
+        title="Original_segmentation",
+        affine_matrix=data_gen.get_affine(),
+    )
+    
+    print(f"Original affine: {data_gen.get_affine()}")
+
     # Create the loss criterion
     criterion = get_loss_criterion(loss_config)
-    
+
     num_batches_per_epoch = 3
     num_epochs = 2
 
     for i in range(num_epochs):
         print(f"Iteration {i + 1}")
-        
+
         count_batches = 0
         for images, segs in islice(loader, num_batches_per_epoch):
             print(f"I'm in the loop")
@@ -257,7 +280,7 @@ if __name__ == "__main__":
             for j in range(images.shape[0]):
                 image = images[j]
                 seg = segs[j]
-                
+
                 # Save the image and segmentation
                 save_representation(
                     image=image,
@@ -277,7 +300,7 @@ if __name__ == "__main__":
             #     title=f"segmentation_{i}",
             # )
             count_batches += 1
-            
+
         print(f"Number of batches in this epoch: {count_batches}")
 
     print("Out of the loop...")

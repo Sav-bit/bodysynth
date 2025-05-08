@@ -10,7 +10,7 @@ import nibabel as nib
 import os
 
 
-def save_representation(image: torch.Tensor, title: str, path: str = None, image_index : int = 0) -> None:
+def save_representation(image: torch.Tensor, title: str, path: str = None, image_index : int = 0, affine_matrix = None) -> None:
     """
     Save a tensor representation to a file.
     Args:
@@ -41,7 +41,8 @@ def save_representation(image: torch.Tensor, title: str, path: str = None, image
 
     header = nib.Nifti1Header()
     header.set_data_dtype(image.cpu().numpy().dtype)
-    toSave = nib.Nifti1Image(image.cpu().numpy(), affine=np.eye(4), header=header)
+    affine = affine_matrix if affine_matrix is not None else np.eye(4)
+    toSave = nib.Nifti1Image(image.cpu().numpy(), affine=affine, header=header)
 
     filename = f"{title}.nii.gz"
 
