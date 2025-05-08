@@ -47,7 +47,7 @@ def get_data_generator(
         data_gen,
         batch_size=batch_size,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=False,
     )
 
     return loader
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         seg_path=seg_path,
         batch_size=batch_size,
         device=device,
-        num_workers=2,
+        num_workers=0,
     )
 
     # Get the model
@@ -152,12 +152,9 @@ if __name__ == "__main__":
         model.train()
 
         print(f"Epoch {epoch + 1}/{num_epochs}")
-
+        #The data generator is infinite, so we need to limit the number of batches
         for images, segs in islice(data_gen, num_batches_per_epoch):
             
-            #Check the images and segs device
-            print(f"Images device: {images.device}")
-            print(f"Segs device: {segs.device}")
 
             optimizer.zero_grad()
 
