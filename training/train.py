@@ -185,6 +185,11 @@ if __name__ == "__main__":
         )
         
         last_epoch = retrieved_state["epoch"]
+        
+        if retrieved_state["is_final"]:
+            print("The last checkpoint is the final checkpoint. No need to continue training.")
+            exit(0)
+        
         print(f"Continuing training from epoch {last_epoch + 1}")
         losses = retrieved_state["loss"]
 
