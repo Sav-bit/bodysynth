@@ -48,7 +48,7 @@ def get_data_generator(
         seg_dir=seg_path,
         device=device,
         patch_size=patch_size,
-        padding=0,
+        padding=10,
     )
 
     loader = DataLoader(
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     num_epochs = 50  # How many epochs to train
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 1  # How many batches to load per epoch
-    patch_size = [256, 256, 256]
+    patch_size = [180, 180, 180]
 
     # Get the data generator
     data_gen = get_data_generator(

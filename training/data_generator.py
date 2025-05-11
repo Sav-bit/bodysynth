@@ -41,9 +41,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         # #If the padding + patch is more big
 
-        # if isinstance(self.padding, list):
-        #     out_size = [x + p for x, p in zip(self.patch_size, self.padding)]
-        # else:
         out_size = [x + self.padding for x in self.patch_size]
         
         print(f"out_size: {out_size}")
