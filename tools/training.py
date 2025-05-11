@@ -29,7 +29,11 @@ def get_device() -> torch.device:
 
 
 def get_data_generator(
-    seg_path: str, batch_size: int, device: torch.device, num_workers: int
+    seg_path: str,
+    batch_size: int,
+    device: torch.device,
+    num_workers: int,
+    patch_size: list = [128, 128, 128],
 ) -> DataLoader:
     """
     Returns a data loader for the given segmentation path.
@@ -44,7 +48,7 @@ def get_data_generator(
     data_gen = DataGenerator(
         seg_dir=seg_path,
         device=device,
-        patch_size=[128, 128, 128],
+        patch_size=patch_size,
         padding=22,
     )
 
@@ -139,6 +143,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
         device=device,
         num_workers=0,
+        patch_size=patch_size,
     )
 
     # Get the model
