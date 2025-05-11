@@ -178,7 +178,7 @@ if __name__ == "__main__":
             optimizer.step()
             curr_loss = loss.item()
             losses.append(curr_loss)
-            print(f"Batch loss: {curr_loss:.4f}")
+            print(f"Loss: {curr_loss:.4f}")
 
         if epoch % 50 == 0:
             checkpoint_dir = "./checkpoints"

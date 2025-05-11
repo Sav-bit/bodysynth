@@ -28,7 +28,7 @@ if __name__ == "__main__":
     
     # Load the model
     state = utils.load_checkpoint(
-       "./checkpoints",
+       "./checkpoints/last_checkpoint.pytorch",
         model,
     )
     
