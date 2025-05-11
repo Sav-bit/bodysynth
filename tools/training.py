@@ -186,7 +186,7 @@ if __name__ == "__main__":
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
-                "loss": loss.item(),
+                "loss": losses,
                 # any other info
             }
             is_best = False
