@@ -24,7 +24,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         seg_dir,
         out_center_str="image",
         patch_size=[128, 128, 128],
-        padding: int | list[int] = 22,
+        padding: int = 22,
         device="cpu",
     ):
         self.seg_dir = seg_dir
@@ -38,18 +38,15 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # The idea here is to set the out_size as a little bit bigger than the patch size
         # so we avoid having the black border around the image in case of non linear transformation
         # then we will crop it to the patch size
-        
+
         # #If the padding + patch is more big
-        
-        
+
         # if isinstance(self.padding, list):
         #     out_size = [x + p for x, p in zip(self.patch_size, self.padding)]
         # else:
-        #     out_size = [x + self.padding for x in self.patch_size]
-        
+        out_size = [x + self.padding for x in self.patch_size]
+
         out_size = patch_size
-        #test
-        self.padding = 0
 
         self.synth = brainsynth.Synthesizer(
             brainsynth.config.SynthesizerConfig(
@@ -108,9 +105,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
             # This has size  (C, D, H, W)
             segmentation = result["seg"].to(torch.int64)
-            
-            
-            if(self.padding > 0):
+
+            if self.padding > 0:
                 sl = slice(self.padding // 2, -self.padding // 2)
 
                 # Crop the image to the patch size
@@ -191,7 +187,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
         Returns the affine transformation matrix of the NIfTI file.
         """
         return self.affine
-    
 
     def _is_mostly_background(
         self,
@@ -272,7 +267,7 @@ if __name__ == "__main__":
         title="Original_segmentation",
         affine_matrix=data_gen.get_affine(),
     )
-    
+
     print(f"Original affine: {data_gen.get_affine()}")
 
     # Create the loss criterion
