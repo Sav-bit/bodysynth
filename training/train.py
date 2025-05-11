@@ -105,6 +105,18 @@ def get_loss():
     return get_loss_criterion(loss_config)
 
 
+def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
+    checkpoint_dir = "./checkpoints"
+    state = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": losses,
+                "is_final": is_final,
+            }
+    is_best = False
+    utils.save_checkpoint(state, is_best, checkpoint_dir)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Train UNet3D with a segmentation path"
@@ -201,12 +213,11 @@ if __name__ == "__main__":
             print(f"Loss: {curr_loss:.4f}")
 
         if epoch % 50 == 0:
-            checkpoint_dir = "./checkpoints"
-            state = {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": losses,
-            }
-            is_best = False
-            utils.save_checkpoint(state, False, checkpoint_dir)
+            save_checkpoint_state(model, optimizer, losses, epoch)
+
+    # Save the final model
+    save_checkpoint_state(model, optimizer, losses, num_epochs, is_final=True)
+    print("Training complete. Model saved.")
+    print(f"Final loss: {losses[-1]:.4f}")
+    print(f"Final epoch: {num_epochs}")
+    print(f"Final losses: {losses}")
