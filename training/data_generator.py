@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 import nibabel as nib
 import brainsynth
-from tools.util import save_representation
+from training.util import save_representation
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
