@@ -46,8 +46,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # else:
         out_size = [x + self.padding for x in self.patch_size]
 
-        out_size = patch_size
-
         self.synth = brainsynth.Synthesizer(
             brainsynth.config.SynthesizerConfig(
                 builder="SaverioSynth",
