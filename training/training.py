@@ -5,9 +5,8 @@ This is the script for training the UNet3D model.
 import argparse
 from itertools import islice
 import torch
-from tools.data_generator import DataGenerator
+from training.data_generator import DataGenerator
 from unet3d import utils
-from unet3d.buildingblocks import DoubleConv
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader

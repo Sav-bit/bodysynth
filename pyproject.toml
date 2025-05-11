@@ -35,5 +35,5 @@ brainsynth = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["brainsynth*", "unet3d*", "tools*"]
+include = ["brainsynth*", "unet3d*", "training*"]
 
