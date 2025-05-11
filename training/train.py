@@ -115,9 +115,17 @@ if __name__ == "__main__":
         required=True,
         help="Path to the segmentation file (e.g., Ernie segmentation)",
     )
+    
+    parser.add_argument(
+        "--continue_training",
+        action="store_true",
+        help="Continue training from the last checkpoint",
+    )
+    
     args = parser.parse_args()
 
     seg_path = args.seg_path
+    continue_training = args.continue_training
 
     # -----------------------------
     # End of the arguments
@@ -153,11 +161,24 @@ if __name__ == "__main__":
 
     # Get the optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
+    
     losses = []
+    last_epoch = 0
+    
+    if continue_training:
+        retrieved_state = utils.load_checkpoint(
+            "./checkpoints/last_checkpoint.pytorch",
+            model,
+            optimizer=optimizer,
+        )
+        
+        last_epoch = retrieved_state["epoch"]
+        print(f"Continuing training from epoch {last_epoch + 1}")
+        losses = retrieved_state["loss"]
+
 
     # Training loop
-    for epoch in range(num_epochs):
+    for epoch in range(last_epoch, num_epochs):
 
         model.train()
 
@@ -186,7 +207,6 @@ if __name__ == "__main__":
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "loss": losses,
-                # any other info
             }
             is_best = False
             utils.save_checkpoint(state, False, checkpoint_dir)

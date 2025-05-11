@@ -39,11 +39,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # so we avoid having the black border around the image in case of non linear transformation
         # then we will crop it to the patch size
 
-        # #If the padding + patch is more big
-
         out_size = [x + self.padding for x in self.patch_size]
-        
-        print(f"out_size: {out_size}")
 
         self.synth = brainsynth.Synthesizer(
             brainsynth.config.SynthesizerConfig(
