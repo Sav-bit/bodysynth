@@ -93,16 +93,25 @@ def get_loss():
     For readability, the loss is hardcoded here.
     """
     # Define your loss configuration
-    loss_config = {
+    dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
             "normalization": "sigmoid",
-            # additional parameters can go here if needed...
         }
     }
+    
+    dice_loss = get_loss_criterion(dice_loss_config)
+    
+    cross_entropy_loss = get_loss_criterion(
+        {
+            "loss": {
+                "name": "CrossEntropyLoss",
+            }
+        }
+    )
 
     # Create the loss criterion
-    return get_loss_criterion(loss_config)
+    return dice_loss + cross_entropy_loss
 
 
 def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
@@ -172,7 +181,7 @@ if __name__ == "__main__":
     criterion = get_loss()
 
     # Get the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)
     
     losses = []
     last_epoch = 0
