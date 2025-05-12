@@ -79,7 +79,8 @@ def plot_loss(losses: list, title: str = "Loss", save_plot=False) -> None:
     plt.ylabel("Loss")
     plt.grid()
     if save_plot:
-        plt.savefig(f"loss.png")
+        dir = os.makedirs("checkpoints", exist_ok=True)
+        plt.savefig(os.join(dir, "loss.png"))
     else:
         plt.show()
     plt.close()
