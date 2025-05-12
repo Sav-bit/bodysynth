@@ -231,6 +231,8 @@ if __name__ == "__main__":
     best_val, epochs_no_improve = float("inf"), 0
     min_lr = 1e-6
 
+    printed_debug = False
+
     # Training loop
     for epoch in range(last_epoch, num_epochs):
 
@@ -265,8 +267,11 @@ if __name__ == "__main__":
             #     print(f"Stopped at epoch {epoch}")
             #     break
 
-            if optimizer.param_groups[0]["lr"] > min_lr:
-                scheduler.step()
+            if optimizer.param_groups[0]["lr"] > min_lr and printed_debug:
+                print(f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}")
+                printed_debug = True
+                
+            optimizer.step()
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
