@@ -13,6 +13,7 @@ dependencies = [
     "torch >= 2.1",
     "h5py",
     "scikit-image",
+    "matplotlib",
 ]
 
 [build-system]

@@ -4,13 +4,20 @@ This is some utility functions for the training, debugging and go on
 
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import nibabel as nib
 import os
 
 
-def save_representation(image: torch.Tensor, title: str, path: str = None, image_index : int = 0, affine_matrix = None) -> None:
+def save_representation(
+    image: torch.Tensor,
+    title: str,
+    path: str = None,
+    image_index: int = 0,
+    affine_matrix=None,
+) -> None:
     """
     Save a tensor representation to a file.
     Args:
@@ -55,3 +62,24 @@ def save_representation(image: torch.Tensor, title: str, path: str = None, image
 
     nib.save(toSave, path)
     print(f"Representation saved to {path}")
+
+
+def plot_loss(losses: list, title: str = "Loss", save_plot=False) -> None:
+    """
+    Plot the loss over time.
+    Args:
+        losses (list): The list of losses.
+        title (str): The title of the plot.
+        save_plot (bool): If True, save the plot to a file.
+    """
+
+    plt.plot(losses)
+    plt.title(title)
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.grid()
+    if save_plot:
+        plt.savefig(f"loss.png")
+    else:
+        plt.show()
+    plt.close()
