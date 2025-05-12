@@ -10,6 +10,7 @@ from unet3d import utils
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import StepLR
 
 
 def get_device() -> torch.device:
@@ -99,9 +100,9 @@ def get_loss():
             "normalization": "sigmoid",
         }
     }
-    
+
     dice_loss = get_loss_criterion(dice_loss_config)
-    
+
     cross_entropy_loss = get_loss_criterion(
         {
             "loss": {
@@ -117,14 +118,15 @@ def get_loss():
 def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
     checkpoint_dir = "./checkpoints"
     state = {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": losses,
-                "is_final": is_final,
-            }
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": losses,
+        "is_final": is_final,
+    }
     is_best = False
     utils.save_checkpoint(state, is_best, checkpoint_dir)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -136,13 +138,13 @@ if __name__ == "__main__":
         required=True,
         help="Path to the segmentation file (e.g., Ernie segmentation)",
     )
-    
+
     parser.add_argument(
         "--continue_training",
         action="store_true",
         help="Continue training from the last checkpoint",
     )
-    
+
     args = parser.parse_args()
 
     seg_path = args.seg_path
@@ -181,34 +183,41 @@ if __name__ == "__main__":
     criterion = get_loss()
 
     # Get the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)
-    
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
     losses = []
     last_epoch = 0
-    
+
     if continue_training:
         retrieved_state = utils.load_checkpoint(
             "./checkpoints/last_checkpoint.pytorch",
             model,
             optimizer=optimizer,
         )
-        
+
         last_epoch = retrieved_state["epoch"]
-        
+
         if retrieved_state["is_final"]:
-            print("The last checkpoint is the final checkpoint. No need to continue training.")
+            print(
+                "The last checkpoint is the final checkpoint. No need to continue training."
+            )
             exit(0)
-        
+
         print(f"Continuing training from epoch {last_epoch + 1}")
         losses = retrieved_state["loss"]
 
+    scheduler = StepLR(optimizer, step_size=30, gamma=0.2, last_epoch=last_epoch - 1)
+
+    # early-stopping callback for validation loss
+    early_stop_patience = 60  # epochs
+    best_val, epochs_no_improve = float("inf"), 0
+    min_lr = 1e-6
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
 
         model.train()
 
-        print(f"Epoch {epoch + 1}/{num_epochs}")
         # The data generator is infinite, so we need to limit the number of batches
         for images, segs in islice(data_gen, num_batches_per_epoch):
 
@@ -224,7 +233,21 @@ if __name__ == "__main__":
             optimizer.step()
             curr_loss = loss.item()
             losses.append(curr_loss)
-            print(f"Loss: {curr_loss:.4f}")
+
+            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {curr_loss:.4f}")
+
+            # ----- early-stopping -----
+            if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
+                best_val = curr_loss
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+            if (
+                epochs_no_improve >= early_stop_patience
+                and optimizer.param_groups[0]["lr"] < 1e-6
+            ):
+                print(f"Stopped at epoch {epoch}")
+                break
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
