@@ -177,7 +177,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 5000  # How many epochs to train
+    num_epochs = 10_000  # How many epochs to train
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 1  # How many batches to load per epoch
     patch_size = [180, 180, 180]
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         print(f"Continuing training from epoch {last_epoch + 1}")
         losses = retrieved_state["loss"]
 
-    scheduler = StepLR(optimizer, step_size=30, gamma=0.2, last_epoch=last_epoch - 1)
+    scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
 
     # early-stopping callback for validation loss
     early_stop_patience = 60  # epochs
@@ -255,24 +255,18 @@ if __name__ == "__main__":
             print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {curr_loss:.4f}")
 
             # ----- early-stopping -----
-            if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
-                best_val = curr_loss
-                epochs_no_improve = 0
-            else:
-                epochs_no_improve += 1
+            # if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
+            #     best_val = curr_loss
+            #     epochs_no_improve = 0
+            # else:
+            #     epochs_no_improve += 1
 
-            has_printed = False
-            if not (
-                epochs_no_improve >= early_stop_patience
-                and scheduler.get_last_lr()[0] < min_lr
-            ):
-                # print(f"Stopped at epoch {epoch}")
-                # break
+            # if epochs_no_improve >= early_stop_patience and optimizer.param_groups[0]['lr'] < 1e-6:
+            #     print(f"Stopped at epoch {epoch}")
+            #     break
+            
+            if (optimizer.param_groups[0]['lr'] > min_lr):
                 scheduler.step()
-            else:
-                if not has_printed:
-                    print("Stopped decreasing the learning rate...")
-                    has_printed = True
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
