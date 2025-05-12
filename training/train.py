@@ -6,6 +6,7 @@ import argparse
 from itertools import islice
 import torch
 from training.data_generator import DataGenerator
+from training.util import plot_loss
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
@@ -112,14 +113,18 @@ def get_losses():
     )
 
     # Create the loss criterion
-    return dice_loss , cross_entropy_loss
+    return dice_loss, cross_entropy_loss
+
 
 def merge_losses(dice_loss, cross_entropy_loss):
     """
     Merges the two loss functions into one.
     """
+
     def merged_loss(prediction, segs):
-        return dice_loss(prediction, segs) + cross_entropy_loss(prediction, segs.float())
+        return dice_loss(prediction, segs) + cross_entropy_loss(
+            prediction, segs.float()
+        )
 
     return merged_loss
 
@@ -135,6 +140,7 @@ def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
     }
     is_best = False
     utils.save_checkpoint(state, is_best, checkpoint_dir)
+    plot_loss(losses, save_plot=True)
 
 
 if __name__ == "__main__":
@@ -190,7 +196,7 @@ if __name__ == "__main__":
 
     # Get the loss criterion
     dice_loss, cross_entropy_loss = get_losses()
-    
+
     # Merge the two loss functions
     criterion = merge_losses(dice_loss, cross_entropy_loss)
 
@@ -267,7 +273,6 @@ if __name__ == "__main__":
                 if not has_printed:
                     print("Stopped decreasing the learning rate...")
                     has_printed = True
-                
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)

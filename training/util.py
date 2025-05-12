@@ -64,7 +64,7 @@ def save_representation(
     print(f"Representation saved to {path}")
 
 
-def plot_loss(losses: list, title: str = "Loss", save_plot=False) -> None:
+def plot_loss(losses: list, save_plot=False) -> None:
     """
     Plot the loss over time.
     Args:
@@ -74,7 +74,7 @@ def plot_loss(losses: list, title: str = "Loss", save_plot=False) -> None:
     """
 
     plt.plot(losses)
-    plt.title(title)
+    plt.title(f"Loss over {len(losses)} epochs")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.grid()
