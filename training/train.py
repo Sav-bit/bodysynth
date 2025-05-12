@@ -264,8 +264,8 @@ if __name__ == "__main__":
             # if epochs_no_improve >= early_stop_patience and optimizer.param_groups[0]['lr'] < 1e-6:
             #     print(f"Stopped at epoch {epoch}")
             #     break
-            
-            if (optimizer.param_groups[0]['lr'] > min_lr):
+
+            if optimizer.param_groups[0]["lr"] > min_lr:
                 scheduler.step()
 
         if epoch % 50 == 0:
