@@ -242,12 +242,14 @@ if __name__ == "__main__":
                 epochs_no_improve = 0
             else:
                 epochs_no_improve += 1
-            if (
+
+            if not (
                 epochs_no_improve >= early_stop_patience
-                and optimizer.param_groups[0]["lr"] < 1e-6
+                and scheduler.get_last_lr() < min_lr
             ):
-                print(f"Stopped at epoch {epoch}")
-                break
+                # print(f"Stopped at epoch {epoch}")
+                # break
+                scheduler.step()
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
