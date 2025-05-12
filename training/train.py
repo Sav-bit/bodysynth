@@ -88,7 +88,7 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     return model
 
 
-def get_loss():
+def get_losses():
     """
     Returns the loss criterion.
     For readability, the loss is hardcoded here.
@@ -112,7 +112,16 @@ def get_loss():
     )
 
     # Create the loss criterion
-    return dice_loss + cross_entropy_loss
+    return dice_loss , cross_entropy_loss
+
+def merge_losses(dice_loss, cross_entropy_loss):
+    """
+    Merges the two loss functions into one.
+    """
+    def merged_loss(prediction, segs):
+        return dice_loss(prediction, segs) + cross_entropy_loss(prediction, segs)
+
+    return merged_loss
 
 
 def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
@@ -180,7 +189,10 @@ if __name__ == "__main__":
     model = get_model(data_gen=data_gen).to(device=device)
 
     # Get the loss criterion
-    criterion = get_loss()
+    dice_loss, cross_entropy_loss = get_losses()
+    
+    # Merge the two loss functions
+    criterion = merge_losses(dice_loss, cross_entropy_loss)
 
     # Get the optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
@@ -249,7 +261,9 @@ if __name__ == "__main__":
             ):
                 # print(f"Stopped at epoch {epoch}")
                 # break
+                print("Reducing learning rate...")
                 scheduler.step()
+                
 
         if epoch % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
