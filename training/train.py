@@ -119,7 +119,7 @@ def merge_losses(dice_loss, cross_entropy_loss):
     Merges the two loss functions into one.
     """
     def merged_loss(prediction, segs):
-        return dice_loss(prediction, segs) + cross_entropy_loss(prediction, segs)
+        return dice_loss(prediction, segs) + cross_entropy_loss(prediction, segs.float())
 
     return merged_loss
 
