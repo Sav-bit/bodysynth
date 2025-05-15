@@ -178,8 +178,8 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 10_000  # How many epochs to train
-    batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 1  # How many batches to load per epoch
+    batch_size = 2  # How many images to load at once
+    num_batches_per_epoch = 100  # How many batches to load per epoch
     patch_size = [180, 180, 180]
 
     # Get the data generator
@@ -238,6 +238,8 @@ if __name__ == "__main__":
 
         model.train()
 
+        batch_losses = []
+
         # The data generator is infinite, so we need to limit the number of batches
         for images, segs in islice(data_gen, num_batches_per_epoch):
 
@@ -252,9 +254,14 @@ if __name__ == "__main__":
 
             optimizer.step()
             curr_loss = loss.item()
-            losses.append(curr_loss)
+            batch_losses.append(curr_loss)
 
-            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {curr_loss:.4f}")
+        # Compute the average loss for the epoch
+        epoch_loss = sum(batch_losses) / len(batch_losses)
+        losses.append(epoch_loss)
+        
+        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+            
 
             # ----- early-stopping -----
             # if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
@@ -267,13 +274,13 @@ if __name__ == "__main__":
             #     print(f"Stopped at epoch {epoch}")
             #     break
 
-            if optimizer.param_groups[0]["lr"] > min_lr and printed_debug:
-                print(f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}")
-                printed_debug = True
+        if optimizer.param_groups[0]["lr"] < min_lr and printed_debug:
+            print(f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}")
+            printed_debug = True
                 
-            optimizer.step()
+        scheduler.step()
 
-        if epoch % 50 == 0:
+        if epoch + 1 % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
 
     # Save the final model
