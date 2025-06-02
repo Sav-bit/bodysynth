@@ -211,7 +211,7 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 500  # How many epochs to train
-    batch_size = 2  # How many images to load at once
+    batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 100  # How many batches to load per epoch
     patch_size = [180, 180, 180]
     validation_interval = 10  # How often to validate the model
