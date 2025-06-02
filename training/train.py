@@ -7,6 +7,7 @@ from itertools import islice
 import torch
 from training.data_generator import DataGenerator
 from training.util import plot_loss
+from training.validation_dataset import ValidationDataset
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
@@ -61,6 +62,27 @@ def get_data_generator(
     )
 
     return loader
+
+
+def get_validation_data_loader(
+    segmentation_path: str,
+    image_path: str,
+    batch_size: int,
+    num_workers: int,
+    patch_size: list = [128, 128, 128],
+):
+    dataset = ValidationDataset(
+        img=image_path,
+        seg=segmentation_path,
+        patch_size=patch_size,
+    )
+
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
 
 
 def get_model(data_gen: DataLoader) -> AbstractUNet:
@@ -160,10 +182,18 @@ if __name__ == "__main__":
         help="Continue training from the last checkpoint",
     )
 
+    parser.add_argument(
+        "--validation_path",
+        type=str,
+        default=None,
+        help="Path to the validation data (optional)",
+    )
+
     args = parser.parse_args()
 
     seg_path = args.seg_path
     continue_training = args.continue_training
+    val_path = args.validation_path
 
     # -----------------------------
     # End of the arguments
@@ -190,6 +220,20 @@ if __name__ == "__main__":
         num_workers=0,
         patch_size=patch_size,
     )
+    
+    # If validation path is provided, get the validation data loader
+    if val_path:
+        val_loader = get_validation_data_loader(
+            segmentation_path=seg_path,
+            image_path=val_path,
+            batch_size=batch_size,
+            num_workers=0,
+            patch_size=patch_size,
+        )
+        print(f"Validation data loader created with {len(val_loader)} batches.")
+    else:
+        val_loader = None
+        print("No validation data loader created.")
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
@@ -259,28 +303,40 @@ if __name__ == "__main__":
         # Compute the average loss for the epoch
         epoch_loss = sum(batch_losses) / len(batch_losses)
         losses.append(epoch_loss)
-        
+
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
-            
 
-            # ----- early-stopping -----
-            # if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
-            #     best_val = curr_loss
-            #     epochs_no_improve = 0
-            # else:
-            #     epochs_no_improve += 1
+        # ----- early-stopping -----
+        # if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
+        #     best_val = curr_loss
+        #     epochs_no_improve = 0
+        # else:
+        #     epochs_no_improve += 1
 
-            # if epochs_no_improve >= early_stop_patience and optimizer.param_groups[0]['lr'] < 1e-6:
-            #     print(f"Stopped at epoch {epoch}")
-            #     break
+        # if epochs_no_improve >= early_stop_patience and optimizer.param_groups[0]['lr'] < 1e-6:
+        #     print(f"Stopped at epoch {epoch}")
+        #     break
 
         if optimizer.param_groups[0]["lr"] < min_lr and printed_debug:
-            print(f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}")
+            print(
+                f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}"
+            )
             printed_debug = True
-                
-        scheduler.step()
 
-        if epoch + 1 % 50 == 0:
+        scheduler.step()
+        
+        if val_loader and (epoch + 1) % 10 == 0:
+            model.eval()
+            with torch.no_grad():
+                val_losses = []
+                for val_images, val_segs in val_loader:
+                    val_prediction = model(val_images)
+                    val_loss = criterion(val_prediction, val_segs)
+                    val_losses.append(val_loss.item())
+                avg_val_loss = sum(val_losses) / len(val_losses)
+                print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
+
+        if (epoch + 1) % 50 == 0:
             save_checkpoint_state(model, optimizer, losses, epoch)
 
     # Save the final model
