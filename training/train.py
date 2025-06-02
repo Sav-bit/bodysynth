@@ -338,6 +338,8 @@ if __name__ == "__main__":
             with torch.no_grad():
                 val_losses = []
                 for val_images, val_segs in val_loader:
+                    val_images = val_images.to(device)
+                    val_segs = val_segs.to(device)
                     val_prediction = model(val_images)
                     val_loss = criterion(val_prediction, val_segs)
                     val_losses.append(val_loss.item())
