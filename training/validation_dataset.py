@@ -3,6 +3,7 @@ import math
 import torch
 import nibabel as nib
 import numpy as np
+import torch.nn.functional as F
 
 
 class ValidationDataset(torch.utils.data.Dataset):
@@ -10,6 +11,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         self,
         img: str,
         seg: str,
+        num_classes: int = 13, # Ernie Extended has 13 classes
         patch_size: list[int] = [128, 128, 128],
         device: str = "cpu",
         dtype=torch.float32,
@@ -20,6 +22,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         img, seg : paths to the NIfTI files
         patch_size : 3-tuple [D, H, W] in voxels
         """
+        self.num_classes = num_classes
         self.data, self.labels = self._load_img(
             img, seg, patch_size=patch_size, device=device, dtype=dtype
         )
@@ -45,14 +48,14 @@ class ValidationDataset(torch.utils.data.Dataset):
         # ---------- load volumes ---------- #
         img_vol = nib.load(img_path).get_fdata().astype(np.float32)
         seg_vol = nib.load(seg_path).get_fdata().astype(np.int64)
-        
+
         # --------- optional intensity normalisation ---------- #
         img_vol = (img_vol - img_vol.mean()) / (img_vol.std() + 1e-8)
 
         # shape: (D, H, W)
         D, H, W = img_vol.shape
         pz, py, px = patch_size
-        sz, sy, sx = [p // 2 for p in patch_size]        # 50 % overlap
+        sz, sy, sx = [p // 2 for p in patch_size]  # 50 % overlap
 
         # ---------- pad if needed so that the last patch fits ---------- #
         pad_D = (math.ceil(D / sz) * sz + pz - sz) - D
@@ -80,16 +83,25 @@ class ValidationDataset(torch.utils.data.Dataset):
 
                     img_patch = torch.tensor(
                         img_vol[iz, iy, ix], dtype=dtype, device=device
-                    ).unsqueeze(0)  # (1, D, H, W)
+                    ).unsqueeze(
+                        0
+                    )  # (1, D, H, W)
 
                     seg_patch = torch.tensor(
                         seg_vol[iz, iy, ix], dtype=torch.int64, device=device
-                    ).unsqueeze(0)
+                    )  # (D, H, W)
+
+                    seg_patch_oh = F.one_hot(
+                        seg_patch, num_classes=self.num_classes
+                    )  # (D, H, W, C)
+
+                    seg_patch = seg_patch_oh.permute(3, 0, 1, 2)  # (C, D, H, W)
 
                     img_patches.append(img_patch)
                     seg_patches.append(seg_patch)
 
         return img_patches, seg_patches
+
     # ------------------------------------------------------------------ #
 
     def __len__(self):
@@ -97,28 +109,29 @@ class ValidationDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]
-    
+
+
 if __name__ == "__main__":
     # Example usage
     dataset = ValidationDataset(
         img="/Users/sav/Documents/Progetti DTU/medical-segmentator/ErnieExtended/m2m_ernie_extended/T1.nii.gz",
         seg="/Users/sav/Documents/Progetti DTU/medical-segmentator/ernie_less_dim.nii.gz",
         patch_size=[128, 128, 128],
-        device="cpu"
+        device="cpu",
+        num_classes=13,
     )
     print(f"Dataset size: {len(dataset)}")
     img, seg = dataset[200]
     print(f"Image shape: {img.shape}, Segmentation shape: {seg.shape}")
-    
-    
-    #Let's save the first image and segmentation patch to verify
-    util.save_representation(
-        image=img,
-        title="test_image",
-        image_index=0,
-    )
-    util.save_representation(
-        image=seg,
-        title="test_segmentation",
-        image_index=0,
-    )
+
+    # Let's save the first image and segmentation patch to verify
+    # util.save_representation(
+    #     image=img,
+    #     title="test_image",
+    #     image_index=0,
+    # )
+    # util.save_representation(
+    #     image=seg,
+    #     title="test_segmentation",
+    #     image_index=0,
+    # )
