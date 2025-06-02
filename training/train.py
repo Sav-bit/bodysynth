@@ -214,7 +214,7 @@ if __name__ == "__main__":
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 100  # How many batches to load per epoch
     patch_size = [180, 180, 180]
-    validation_interval = 10  # How often to validate the model
+    VALIDATION_INTERVAL = 10  # How often to validate the model
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -333,7 +333,7 @@ if __name__ == "__main__":
 
         scheduler.step()
 
-        if val_loader and (epoch + 1) % validation_interval == 0:
+        if val_loader and (epoch + 1) % VALIDATION_INTERVAL == 0:
             model.eval()
             with torch.no_grad():
                 val_losses = []
