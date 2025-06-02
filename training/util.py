@@ -64,23 +64,44 @@ def save_representation(
     print(f"Representation saved to {path}")
 
 
-def plot_loss(losses: list, save_plot=False) -> None:
+def plot_loss(
+    train_losses: dict[int, float],
+    val_losses: dict[int, float] | None = None,
+    save_plot: bool = False,
+) -> None:
     """
-    Plot the loss over time.
+    Plot both training and (optionally) validation losses over time.
+    The losses are dicts where each key is an epoch, and each value is the loss.
+
     Args:
-        losses (list): The list of losses.
-        title (str): The title of the plot.
-        save_plot (bool): If True, save the plot to a file.
+        train_losses (dict[int, float]): Dictionary of training losses, {epoch: loss}.
+        val_losses (dict[int, float], optional): Dictionary of validation losses, {epoch: loss}.
+        save_plot (bool): If True, save the plot to "checkpoints/loss.png"; otherwise show it.
     """
 
-    plt.plot(losses)
-    plt.title(f"Loss over {len(losses)} epochs")
+
+    # Sort epochs so they are plotted in the correct order
+    train_epochs = sorted(train_losses.keys())
+    train_vals = [train_losses[e] for e in train_epochs]
+
+    plt.figure()
+    plt.plot(train_epochs, train_vals, label="Training Loss")
+
+    if val_losses is not None and len(val_losses) > 0:
+        val_epochs = sorted(val_losses.keys())
+        val_vals = [val_losses[e] for e in val_epochs]
+        plt.plot(val_epochs, val_vals, label="Validation Loss")
+
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.grid()
+    plt.title("Loss over Time")
+    plt.grid(True)
+    plt.legend()
+
     if save_plot:
         os.makedirs("checkpoints", exist_ok=True)
         plt.savefig(os.path.join("checkpoints", "loss.png"))
     else:
         plt.show()
+
     plt.close()

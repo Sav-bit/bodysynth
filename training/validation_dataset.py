@@ -1,3 +1,4 @@
+import util
 import math
 import torch
 import nibabel as nib
@@ -44,7 +45,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         # ---------- load volumes ---------- #
         img_vol = nib.load(img_path).get_fdata().astype(np.float32)
         seg_vol = nib.load(seg_path).get_fdata().astype(np.int64)
-
+        
         # --------- optional intensity normalisation ---------- #
         img_vol = (img_vol - img_vol.mean()) / (img_vol.std() + 1e-8)
 
@@ -82,7 +83,7 @@ class ValidationDataset(torch.utils.data.Dataset):
                     ).unsqueeze(0)  # (1, D, H, W)
 
                     seg_patch = torch.tensor(
-                        seg_vol[iz, iy, ix], dtype=torch.long, device=device
+                        seg_vol[iz, iy, ix], dtype=torch.int64, device=device
                     ).unsqueeze(0)
 
                     img_patches.append(img_patch)
@@ -97,3 +98,27 @@ class ValidationDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]
     
+if __name__ == "__main__":
+    # Example usage
+    dataset = ValidationDataset(
+        img="/Users/sav/Documents/Progetti DTU/medical-segmentator/ErnieExtended/m2m_ernie_extended/T1.nii.gz",
+        seg="/Users/sav/Documents/Progetti DTU/medical-segmentator/ernie_less_dim.nii.gz",
+        patch_size=[128, 128, 128],
+        device="cpu"
+    )
+    print(f"Dataset size: {len(dataset)}")
+    img, seg = dataset[200]
+    print(f"Image shape: {img.shape}, Segmentation shape: {seg.shape}")
+    
+    
+    #Let's save the first image and segmentation patch to verify
+    util.save_representation(
+        image=img,
+        title="test_image",
+        image_index=0,
+    )
+    util.save_representation(
+        image=seg,
+        title="test_segmentation",
+        image_index=0,
+    )

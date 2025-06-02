@@ -151,18 +151,21 @@ def merge_losses(dice_loss, cross_entropy_loss):
     return merged_loss
 
 
-def save_checkpoint_state(model, optimizer, losses, epoch, is_final=False):
+def save_checkpoint_state(
+    model, optimizer, train_losses, epoch, is_final=False, val_lossess=None
+):
     checkpoint_dir = "./checkpoints"
     state = {
         "epoch": epoch,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
-        "loss": losses,
+        "loss": train_losses,
         "is_final": is_final,
+        "val_loss": val_lossess,
     }
     is_best = False
     utils.save_checkpoint(state, is_best, checkpoint_dir)
-    plot_loss(losses, save_plot=True)
+    plot_loss(train_losses, val_losses, save_plot=True)
 
 
 if __name__ == "__main__":
@@ -211,6 +214,7 @@ if __name__ == "__main__":
     batch_size = 2  # How many images to load at once
     num_batches_per_epoch = 100  # How many batches to load per epoch
     patch_size = [180, 180, 180]
+    validation_interval = 10  # How often to validate the model
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -220,7 +224,7 @@ if __name__ == "__main__":
         num_workers=0,
         patch_size=patch_size,
     )
-    
+
     # If validation path is provided, get the validation data loader
     if val_path:
         val_loader = get_validation_data_loader(
@@ -247,7 +251,9 @@ if __name__ == "__main__":
     # Get the optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
-    losses = []
+    # The lossess here are a dict where keys are the epoch numbers and values are the losses
+    train_losses = {}
+    validation_losses = {}
     last_epoch = 0
 
     if continue_training:
@@ -266,7 +272,9 @@ if __name__ == "__main__":
             exit(0)
 
         print(f"Continuing training from epoch {last_epoch + 1}")
-        losses = retrieved_state["loss"]
+        train_losses = retrieved_state["loss"]
+        if "val_loss" in retrieved_state:
+            validation_losses = retrieved_state["val_loss"]
 
     scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
 
@@ -302,7 +310,7 @@ if __name__ == "__main__":
 
         # Compute the average loss for the epoch
         epoch_loss = sum(batch_losses) / len(batch_losses)
-        losses.append(epoch_loss)
+        train_losses[epoch + 1] = epoch_loss
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
 
@@ -324,8 +332,8 @@ if __name__ == "__main__":
             printed_debug = True
 
         scheduler.step()
-        
-        if val_loader and (epoch + 1) % 10 == 0:
+
+        if val_loader and (epoch + 1) % validation_interval == 0:
             model.eval()
             with torch.no_grad():
                 val_losses = []
@@ -335,13 +343,15 @@ if __name__ == "__main__":
                     val_losses.append(val_loss.item())
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
+                validation_losses[epoch + 1] = avg_val_loss
 
         if (epoch + 1) % 50 == 0:
-            save_checkpoint_state(model, optimizer, losses, epoch)
+            save_checkpoint_state(
+                model, optimizer, train_losses, epoch, validation_losses
+            )
 
     # Save the final model
-    save_checkpoint_state(model, optimizer, losses, num_epochs, is_final=True)
+    save_checkpoint_state(
+        model, optimizer, train_losses, num_epochs, validation_losses, is_final=True
+    )
     print("Training complete. Model saved.")
-    print(f"Final loss: {losses[-1]:.4f}")
-    print(f"Final epoch: {num_epochs}")
-    print(f"Final losses: {losses}")
