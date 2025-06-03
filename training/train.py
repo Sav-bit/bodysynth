@@ -214,7 +214,7 @@ if __name__ == "__main__":
     num_epochs = 5000  # How many epochs to train
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 1  # How many batches to load per epoch
-    patch_size = [170, 170, 170]
+    patch_size = [180, 180, 180]
     VALIDATION_INTERVAL = 10  # How often to validate the model
 
     # Get the data generator
@@ -232,7 +232,7 @@ if __name__ == "__main__":
             segmentation_path=seg_path,
             image_path=val_path,
             batch_size=batch_size,
-            num_workers=2,
+            num_workers=0,
             patch_size=patch_size,
         )
         print(f"Validation data loader created with {len(val_loader)} batches.")
@@ -347,6 +347,17 @@ if __name__ == "__main__":
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
                 validation_losses[epoch + 1] = avg_val_loss
+                
+            # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
+            # Delete the last‐used validation tensors so they drop out of scope:
+            del val_images, val_segs, val_prediction, val_loss
+            # This will (mostly) clear PyTorch’s cached blocks:
+            torch.cuda.empty_cache()
+            
+            # Return the model to training mode and clear any leftover gradients:
+            model.train()
+            optimizer.zero_grad()
+        
 
         if (epoch + 1) % 50 == 0:
             save_checkpoint_state(
