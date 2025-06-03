@@ -166,7 +166,7 @@ def save_checkpoint_state(
     }
     is_best = False
     utils.save_checkpoint(state, is_best, checkpoint_dir)
-    plot_loss(train_losses, val_losses, save_plot=True)
+    plot_loss(train_losses, val_lossess, save_plot=True)
 
 
 if __name__ == "__main__":
@@ -347,25 +347,33 @@ if __name__ == "__main__":
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
                 validation_losses[epoch + 1] = avg_val_loss
-                
+
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
             # Delete the last‐used validation tensors so they drop out of scope:
             del val_images, val_segs, val_prediction, val_loss
             # This will (mostly) clear PyTorch’s cached blocks:
             torch.cuda.empty_cache()
-            
+
             # Return the model to training mode and clear any leftover gradients:
             model.train()
             optimizer.zero_grad()
-        
 
         if (epoch + 1) % 50 == 0:
             save_checkpoint_state(
-                model, optimizer, train_losses, epoch, validation_losses
+                model=model,
+                optimizer=optimizer,
+                train_losses=train_losses,
+                epoch=epoch,
+                val_lossess=validation_losses,
             )
 
     # Save the final model
     save_checkpoint_state(
-        model, optimizer, train_losses, num_epochs, validation_losses, is_final=True
+        model=model,
+        optimizer=optimizer,
+        train_losses=train_losses,
+        epoch=num_epochs,
+        val_lossess=validation_losses,
+        is_final=True,
     )
     print("Training complete. Model saved.")

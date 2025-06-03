@@ -66,7 +66,7 @@ def save_representation(
 
 def plot_loss(
     train_losses: dict[int, float],
-    val_losses: dict[int, float] | None = None,
+    validation_losses: dict[int, float] | None = None,
     save_plot: bool = False,
 ) -> None:
     """
@@ -75,7 +75,7 @@ def plot_loss(
 
     Args:
         train_losses (dict[int, float]): Dictionary of training losses, {epoch: loss}.
-        val_losses (dict[int, float], optional): Dictionary of validation losses, {epoch: loss}.
+        validation_losses (dict[int, float], optional): Dictionary of validation losses, {epoch: loss}.
         save_plot (bool): If True, save the plot to "checkpoints/loss.png"; otherwise show it.
     """
 
@@ -87,9 +87,9 @@ def plot_loss(
     plt.figure()
     plt.plot(train_epochs, train_vals, label="Training Loss")
 
-    if val_losses is not None and len(val_losses) > 0:
-        val_epochs = sorted(val_losses.keys())
-        val_vals = [val_losses[e] for e in val_epochs]
+    if validation_losses is not None and len(validation_losses) > 0:
+        val_epochs = sorted(validation_losses.keys())
+        val_vals = [validation_losses[e] for e in val_epochs]
         plt.plot(val_epochs, val_vals, label="Validation Loss")
 
     plt.xlabel("Epoch")
