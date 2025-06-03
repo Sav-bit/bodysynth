@@ -82,7 +82,7 @@ def get_validation_data_loader(
         dataset,
         batch_size=batch_size,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=False,
     )
 
 
@@ -211,9 +211,9 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 500  # How many epochs to train
+    num_epochs = 5000  # How many epochs to train
     batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 100  # How many batches to load per epoch
+    num_batches_per_epoch = 1  # How many batches to load per epoch
     patch_size = [170, 170, 170]
     VALIDATION_INTERVAL = 10  # How often to validate the model
 
