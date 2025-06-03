@@ -75,6 +75,7 @@ def get_validation_data_loader(
         img=image_path,
         seg=segmentation_path,
         patch_size=patch_size,
+        device="cpu",
     )
 
     return DataLoader(
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     num_epochs = 500  # How many epochs to train
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 100  # How many batches to load per epoch
-    patch_size = [180, 180, 180]
+    patch_size = [170, 170, 170]
     VALIDATION_INTERVAL = 10  # How often to validate the model
 
     # Get the data generator
@@ -231,7 +232,7 @@ if __name__ == "__main__":
             segmentation_path=seg_path,
             image_path=val_path,
             batch_size=batch_size,
-            num_workers=0,
+            num_workers=2,
             patch_size=patch_size,
         )
         print(f"Validation data loader created with {len(val_loader)} batches.")
