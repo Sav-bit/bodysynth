@@ -211,9 +211,9 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 5000  # How many epochs to train
+    num_epochs = 1000  # How many epochs to train
     batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 1  # How many batches to load per epoch
+    num_batches_per_epoch = 100  # How many batches to load per epoch
     patch_size = [180, 180, 180]
     VALIDATION_INTERVAL = 10  # How often to validate the model
 
