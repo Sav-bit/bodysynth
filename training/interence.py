@@ -96,8 +96,8 @@ def sliding_window_predict(
 
     padded, pads = pad_for_grid(volume, patch_size, stride)
 
-    # C = model.out_channels
-    C = 2  # for binary segmentation
+    C = model.out_channels
+    # C = 2  # for binary segmentation
     probs_sum = np.zeros((C, *padded.shape), dtype=np.float32)
     weight_sum = np.zeros_like(probs_sum)
 
