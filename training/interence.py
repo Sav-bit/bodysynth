@@ -165,12 +165,12 @@ def main():
         "--out_path", required=True, help="Output segmentation NIfTI filename"
     )
     parser.add_argument(
-        "--num_classes", type=int, default=2, help="Number of target classes"
+        "--num_classes", type=int, default=13, help="Number of target classes"
     )
     parser.add_argument("--patch_size", type=int, nargs=3, default=[180, 180, 180])
     parser.add_argument("--stride", type=int, nargs=3, default=[90, 90, 90])
     parser.add_argument(
-        "--sw_batch_size", type=int, default=4, help="How many patches per GPU batch"
+        "--sw_batch_size", type=int, default=1, help="How many patches per GPU batch"
     )
 
     args = parser.parse_args()
@@ -208,61 +208,61 @@ def main():
 
 
 if __name__ == "__main__":
-    # main()
+    main()
     
-    #let's do a simple test
-    # Load the model
-    device = get_device()
-    #let's create a dummy model
-    model = UNet3D(
-        in_channels=1,
-        out_channels=2,
-        f_maps=(32, 64, 128),
-        layer_order="cgr",
-        num_groups=8,
-        final_sigmoid=False,
-        conv_kernel_size=3,
-        pool_kernel_size=2,
-        conv_padding=1,
-        conv_upscale=2,
-        upsample="deconv",
-        num_levels=5,
-        dropout_prob=0.0,
-        is_segmentation=True,
-        is3d=True,
-    ).to(device)
-    model.eval()
+    # #let's do a simple test
+    # # Load the model
+    # device = get_device()
+    # #let's create a dummy model
+    # model = UNet3D(
+    #     in_channels=1,
+    #     out_channels=2,
+    #     f_maps=(32, 64, 128),
+    #     layer_order="cgr",
+    #     num_groups=8,
+    #     final_sigmoid=False,
+    #     conv_kernel_size=3,
+    #     pool_kernel_size=2,
+    #     conv_padding=1,
+    #     conv_upscale=2,
+    #     upsample="deconv",
+    #     num_levels=5,
+    #     dropout_prob=0.0,
+    #     is_segmentation=True,
+    #     is3d=True,
+    # ).to(device)
+    # model.eval()
 
-    # let's create a dummy patch size of 32, 32, 32
-    patch_size = (32, 32, 32)
-    # let's create a dummy stride of 16, 16, 16
-    stride = (16, 16, 16)
-    # let's create a dummy sw_batch_size of 4
-    sw_batch_size = 4
-    # let's create a dummy volume of 128, 128, 128
-    volume = torch.randn(128, 128, 128).to(device)
+    # # let's create a dummy patch size of 32, 32, 32
+    # patch_size = (32, 32, 32)
+    # # let's create a dummy stride of 16, 16, 16
+    # stride = (16, 16, 16)
+    # # let's create a dummy sw_batch_size of 4
+    # sw_batch_size = 4
+    # # let's create a dummy volume of 128, 128, 128
+    # volume = torch.randn(128, 128, 128).to(device)
     
-    print("About to run sliding_window_predict....")
+    # print("About to run sliding_window_predict....")
     
-    probs = sliding_window_predict(
-        model=model,
-        volume=volume.cpu().numpy(),
-        patch_size=patch_size,
-        stride=stride,
-        sw_batch_size=sw_batch_size,
-        device=device,
-    )
+    # probs = sliding_window_predict(
+    #     model=model,
+    #     volume=volume.cpu().numpy(),
+    #     patch_size=patch_size,
+    #     stride=stride,
+    #     sw_batch_size=sw_batch_size,
+    #     device=device,
+    # )
     
     
-    seg = probs.argmax(0).astype(np.uint8)
+    # seg = probs.argmax(0).astype(np.uint8)
     
-    print("Segmentation shape:", seg.shape)
+    # print("Segmentation shape:", seg.shape)
     
-    out_img = nib.Nifti1Image(seg, np.eye(4), None)
-    nib.save(out_img, "test_segmentation.nii.gz")
-    print("Segmentation saved to", "test_segmentation.nii.gz")
+    # out_img = nib.Nifti1Image(seg, np.eye(4), None)
+    # nib.save(out_img, "test_segmentation.nii.gz")
+    # print("Segmentation saved to", "test_segmentation.nii.gz")
     
-    #save also the volume
-    out_img = nib.Nifti1Image(volume.cpu().numpy(), np.eye(4), None)
-    nib.save(out_img, "test_volume.nii.gz")
-    print("Volume saved to", "test_volume.nii.gz")
+    # #save also the volume
+    # out_img = nib.Nifti1Image(volume.cpu().numpy(), np.eye(4), None)
+    # nib.save(out_img, "test_volume.nii.gz")
+    # print("Volume saved to", "test_volume.nii.gz")
