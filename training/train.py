@@ -279,7 +279,7 @@ if __name__ == "__main__":
         if "val_loss" in retrieved_state:
             validation_losses = retrieved_state["val_loss"]
 
-    scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
+    #scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
 
     # early-stopping callback for validation loss
     early_stop_patience = 60  # epochs
@@ -334,7 +334,7 @@ if __name__ == "__main__":
             )
             printed_debug = True
 
-        scheduler.step()
+        #scheduler.step()
 
         if val_loader and (epoch + 1) % VALIDATION_INTERVAL == 0:
             model.eval()
