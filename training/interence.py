@@ -24,6 +24,26 @@ import nibabel as nib
 from unet3d.model import UNet3D
 from unet3d import utils
 from monai.inferers import sliding_window_inference
+from nibabel.orientations import axcodes2ornt
+from nibabel.orientations import ornt_transform
+
+
+def get_orientation(nii: nib.Nifti1Image) -> tuple[str, str, str]:
+    """Gets the orientation of a nifti image."""
+    orientation = nib.aff2axcodes(nii.affine)
+    return orientation
+
+def reorient(
+    nii: nib.Nifti1Image,
+    orientation: str | tuple[str, str, str] = "RAS",
+) -> nib.Nifti1Image:
+    """Reorients a nifti image to specified orientation. Orientation string or tuple
+    must consist of "R" or "L", "A" or "P", and "I" or "S" in any order."""
+    orig_ornt = nib.io_orientation(nii.affine)
+    targ_ornt = axcodes2ornt(orientation)
+    transform = ornt_transform(orig_ornt, targ_ornt)
+    reoriented_nii = nii.as_reoriented(transform)
+    return reoriented_nii
 
 
 def get_device() -> torch.device:
@@ -73,7 +93,6 @@ def main():
         "--num_classes", type=int, default=13, help="Number of target classes"
     )
     parser.add_argument("--patch_size", type=int, nargs=3, default=[180, 180, 180])
-    parser.add_argument("--stride", type=int, nargs=3, default=[90, 90, 90])
     parser.add_argument(
         "--sw_batch_size", type=int, default=1, help="How many patches per GPU batch"
     )
@@ -85,16 +104,22 @@ def main():
 
     # 1. Load and normalise volume – keep exactly the preprocessing used during training!
     img = nib.load(args.image_path)
-    vol = img.get_fdata().astype(np.float32)
+    if get_orientation(img) != ("P", "S", "R"):
+        print("Reorienting image to PSR orientation...")
+         # Reorient to PSR (Posterior-Superior-Right) orientation
+         # This is the same as Ernie Extended's orientation
+         # which is required for the model to work correctly
+         # as it was trained on images in this orientation.
+        img = reorient(img, "PSR")
+    vol = img.get_fdata()
     vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
-    # vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score; customise if needed
+    vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score; customise if needed
 
     # 2. Load network
     model = load_model(Path(args.checkpoint), args.num_classes, device)
 
     # 3. Predict
     patch_size = tuple(args.patch_size)
-    stride = tuple(args.stride)
 
     # probs = sliding_window_predict(
     #     model,
@@ -116,8 +141,6 @@ def main():
             device=device,
         )
             
-            
-
     seg = seg_probs.argmax(dim=1).squeeze(0).cpu().numpy()
 
     # 4. Save segmentation
