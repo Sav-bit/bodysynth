@@ -181,7 +181,7 @@ def save_checkpoint_state(
         "learning_rate": learning_rate,
     }
     utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
-    plot_loss(train_losses, val_lossess, save_plot=True)
+    plot_loss(train_losses, val_lossess, save_plot=True, run_name=run_name)
 
 
 if __name__ == "__main__":

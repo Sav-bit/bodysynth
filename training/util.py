@@ -68,6 +68,7 @@ def plot_loss(
     train_losses: dict[int, float],
     validation_losses: dict[int, float] | None = None,
     save_plot: bool = False,
+    run_name: str = None,
 ) -> None:
     """
     Plot both training and (optionally) validation losses over time.
@@ -100,7 +101,7 @@ def plot_loss(
 
     if save_plot:
         os.makedirs("checkpoints", exist_ok=True)
-        plt.savefig(os.path.join("checkpoints", "loss.png"))
+        plt.savefig(os.path.join("checkpoints", f"loss_{run_name}.png"))
     else:
         plt.show()
 
