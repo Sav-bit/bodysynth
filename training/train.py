@@ -164,9 +164,11 @@ def save_checkpoint_state(
     optimizer,
     train_losses,
     epoch,
+    learning_rate,
     is_final=False,
     val_lossess=None,
     run_name=None,
+    is_best=False,
 ):
     checkpoint_dir = "./checkpoints"
     state = {
@@ -176,8 +178,8 @@ def save_checkpoint_state(
         "loss": train_losses,
         "is_final": is_final,
         "val_loss": val_lossess,
+        "learning_rate": learning_rate,
     }
-    is_best = False
     utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
     plot_loss(train_losses, val_lossess, save_plot=True)
 
@@ -232,10 +234,10 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 100  # How many epochs to train
+    num_epochs = 5000  # How many epochs to train
     batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 2  # How many batches to load per epoch
-    patch_size = [128, 128, 128]
+    num_batches_per_epoch = 10  # How many batches to load per epoch
+    patch_size = [150, 150, 150]
     VALIDATION_INTERVAL = 10  # How often to validate the model
     LEARNING_RATE = 3e-4  # Learning rate for the optimizer
 
@@ -390,6 +392,8 @@ if __name__ == "__main__":
                 epoch=epoch,
                 val_lossess=validation_losses,
                 run_name=run_name,
+                learning_rate=LEARNING_RATE,
+                is_best=False,
             )
 
     model.load_state_dict(best_model_wts)
@@ -402,5 +406,6 @@ if __name__ == "__main__":
         val_lossess=validation_losses,
         run_name=run_name,
         is_final=True,
+        is_best=True,
     )
     print("Training complete. Model saved.")

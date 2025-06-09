@@ -35,7 +35,7 @@ def save_checkpoint(state, is_best, checkpoint_dir, title=None):
         
     if title is not None:
         epoch = state["epoch"]
-        title = f"{title}_epoch_{epoch}"
+        title = f"{title}_epoch_{epoch}_{'best' if is_best else ''}"
     else:
         title = "best_checkpoint" if is_best else "last_checkpoint"
 
