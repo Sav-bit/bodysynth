@@ -13,6 +13,7 @@ from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
+import copy
 
 
 def get_device() -> torch.device:
@@ -150,7 +151,7 @@ def merge_losses(dice_loss, cross_entropy_loss):
         dice_term = dice_loss(prediction, segs_onehot)
 
         # 2) CE wants [N, D, H, W] LongTensor of class indices
-        labels = segs_onehot.argmax(dim=1)          # → [N, D, H, W]
+        labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
         ce_term = cross_entropy_loss(prediction, labels.long())
 
         return dice_term + ce_term
@@ -159,7 +160,13 @@ def merge_losses(dice_loss, cross_entropy_loss):
 
 
 def save_checkpoint_state(
-    model, optimizer, train_losses, epoch, is_final=False, val_lossess=None, run_name=None
+    model,
+    optimizer,
+    train_losses,
+    epoch,
+    is_final=False,
+    val_lossess=None,
+    run_name=None,
 ):
     checkpoint_dir = "./checkpoints"
     state = {
@@ -198,7 +205,7 @@ if __name__ == "__main__":
         default=None,
         help="Path to the validation data (optional)",
     )
-    
+
     parser.add_argument(
         "--run_name",
         type=str,
@@ -230,6 +237,7 @@ if __name__ == "__main__":
     num_batches_per_epoch = 2  # How many batches to load per epoch
     patch_size = [128, 128, 128]
     VALIDATION_INTERVAL = 10  # How often to validate the model
+    LEARNING_RATE = 3e-4  # Learning rate for the optimizer
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -256,8 +264,10 @@ if __name__ == "__main__":
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
-    
-    print(f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}")
+
+    print(
+        f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}"
+    )
 
     # Get the loss criterion
     dice_loss, cross_entropy_loss = get_losses()
@@ -266,7 +276,7 @@ if __name__ == "__main__":
     criterion = merge_losses(dice_loss, cross_entropy_loss)
 
     # Get the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     # The lossess here are a dict where keys are the epoch numbers and values are the losses
     train_losses = {}
@@ -293,14 +303,14 @@ if __name__ == "__main__":
         if "val_loss" in retrieved_state:
             validation_losses = retrieved_state["val_loss"]
 
-    #scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
+    # scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
 
-    # early-stopping callback for validation loss
-    early_stop_patience = 60  # epochs
-    best_val, epochs_no_improve = float("inf"), 0
-    min_lr = 1e-6
-
-    printed_debug = False
+    # Early-stop settings
+    best_val_loss = float("inf")
+    best_model_wts = copy.deepcopy(model.state_dict())
+    patience = 60  # epochs to wait for an improvement
+    min_delta = 5e-3  # minimum drop in loss to count as “improvement”
+    patience_counter = 0
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
@@ -331,24 +341,7 @@ if __name__ == "__main__":
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
 
-        # ----- early-stopping -----
-        # if curr_loss + 5e-3 < best_val:  # “improved by ≥ 5 × 10⁻³”
-        #     best_val = curr_loss
-        #     epochs_no_improve = 0
-        # else:
-        #     epochs_no_improve += 1
-
-        # if epochs_no_improve >= early_stop_patience and optimizer.param_groups[0]['lr'] < 1e-6:
-        #     print(f"Stopped at epoch {epoch}")
-        #     break
-
-        if optimizer.param_groups[0]["lr"] < min_lr and printed_debug:
-            print(
-                f"Here, at epoch {epoch}, the lr is {optimizer.param_groups[0]['lr']}, and the min_lr is {min_lr}"
-            )
-            printed_debug = True
-
-        #scheduler.step()
+        # scheduler.step()
 
         if val_loader and (epoch + 1) % VALIDATION_INTERVAL == 0:
             model.eval()
@@ -374,6 +367,21 @@ if __name__ == "__main__":
             model.train()
             optimizer.zero_grad()
 
+            # —— EARLY-STOPPING CHECK ——
+            if avg_val_loss + min_delta < best_val_loss:
+                best_val_loss = avg_val_loss
+                best_model_wts = copy.deepcopy(model.state_dict())
+                patience_counter = 0
+                print("Validation loss improved. Saving model state.")
+            else:
+                patience_counter += 1
+
+            if patience_counter >= patience:
+                print(
+                    f"Early stopping at epoch {epoch+1} :Best val loss: {best_val_loss:.4f}"
+                )
+                break
+
         if (epoch + 1) % 50 == 0:
             save_checkpoint_state(
                 model=model,
@@ -384,6 +392,7 @@ if __name__ == "__main__":
                 run_name=run_name,
             )
 
+    model.load_state_dict(best_model_wts)
     # Save the final model
     save_checkpoint_state(
         model=model,
