@@ -121,7 +121,7 @@ def get_losses():
     dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
-            "normalization": "sigmoid",
+            "normalization": "softmax",
         }
     }
 
@@ -146,7 +146,7 @@ def merge_losses(dice_loss, cross_entropy_loss):
 
     def merged_loss(prediction, segs):
         return dice_loss(prediction, segs) + cross_entropy_loss(
-            prediction, segs.float()
+            prediction, segs.long()
         )
 
     return merged_loss
@@ -242,6 +242,8 @@ if __name__ == "__main__":
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
+    
+    print(f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}")
 
     # Get the loss criterion
     dice_loss, cross_entropy_loss = get_losses()
