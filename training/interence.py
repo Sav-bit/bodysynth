@@ -23,6 +23,7 @@ import nibabel as nib
 
 from unet3d.model import UNet3D
 from unet3d import utils
+from monai.inferers import sliding_window_inference
 
 
 def get_device() -> torch.device:
@@ -55,32 +56,6 @@ def load_model(checkpoint_path: Path, num_classes: int, device: torch.device) ->
     model.eval()
     return model
 
-
-def gaussian_kernel(shape):
-    """Separable 3‑D Gaussian used to down‑weight patch borders (nnU‑Net style)."""
-    axes = [np.linspace(-1, 1, s, dtype=np.float32) for s in shape]
-    zz, yy, xx = np.meshgrid(*axes, indexing="ij")
-    g = np.exp(-0.5 * (zz**2 + yy**2 + xx**2))
-    return g / g.max()
-
-
-def pad_for_grid(vol: np.ndarray, patch: tuple[int, ...], stride: tuple[int, ...]):
-    """Reflect‑pad so that a sliding‑window grid covers the full volume."""
-    pads = []
-    for dim, p, s in zip(vol.shape, patch, stride):
-        if dim < p:
-            total = p - dim
-        else:
-            remainder = (dim - p) % s
-            total = (s - remainder) % s
-        pads.append((total // 2, total - total // 2))
-    padded = np.pad(vol, pads, mode="reflect")
-    return padded, pads
-
-
-def unpad(vol: np.ndarray, pads):
-    slices = [slice(p0, vol.shape[i] - p1) for i, (p0, p1) in enumerate(pads)]
-    return vol[tuple(slices)]
 
 
 @torch.no_grad()
@@ -181,7 +156,8 @@ def main():
     # 1. Load and normalise volume – keep exactly the preprocessing used during training!
     img = nib.load(args.image_path)
     vol = img.get_fdata().astype(np.float32)
-    vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score; customise if needed
+    vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
+    # vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score; customise if needed
 
     # 2. Load network
     model = load_model(Path(args.checkpoint), args.num_classes, device)
@@ -190,16 +166,29 @@ def main():
     patch_size = tuple(args.patch_size)
     stride = tuple(args.stride)
 
-    probs = sliding_window_predict(
-        model,
-        vol,
-        patch_size=patch_size,
-        stride=stride,
-        sw_batch_size=args.sw_batch_size,
-        device=device,
-    )
+    # probs = sliding_window_predict(
+    #     model,
+    #     vol,
+    #     patch_size=patch_size,
+    #     stride=stride,
+    #     sw_batch_size=args.sw_batch_size,
+    #     device=device,
+    # )
+    
+    with torch.no_grad():
+        seg_probs = sliding_window_inference(
+            inputs =vol_tensor,
+            roi_size=patch_size,
+            sw_batch_size=args.sw_batch_size,
+            predictor=model,
+            overlap=0.5,  # 50% overlap
+            mode="gaussian",
+            device=device,
+        )
+            
+            
 
-    seg = probs.argmax(0).astype(np.uint8)
+    seg = seg_probs.argmax(dim=1).squeeze(0).cpu().numpy()
 
     # 4. Save segmentation
     out_img = nib.Nifti1Image(seg, img.affine, img.header)

@@ -14,6 +14,7 @@ dependencies = [
     "h5py",
     "scikit-image",
     "matplotlib",
+    "monai",
 ]
 
 [build-system]
