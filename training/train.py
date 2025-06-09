@@ -153,7 +153,7 @@ def merge_losses(dice_loss, cross_entropy_loss):
 
 
 def save_checkpoint_state(
-    model, optimizer, train_losses, epoch, is_final=False, val_lossess=None
+    model, optimizer, train_losses, epoch, is_final=False, val_lossess=None, run_name=None
 ):
     checkpoint_dir = "./checkpoints"
     state = {
@@ -165,7 +165,7 @@ def save_checkpoint_state(
         "val_loss": val_lossess,
     }
     is_best = False
-    utils.save_checkpoint(state, is_best, checkpoint_dir)
+    utils.save_checkpoint(state, is_best, checkpoint_dir, run_name=run_name)
     plot_loss(train_losses, val_lossess, save_plot=True)
 
 
@@ -192,12 +192,20 @@ if __name__ == "__main__":
         default=None,
         help="Path to the validation data (optional)",
     )
+    
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default=None,
+        help="Name of the run for logging purposes",
+    )
 
     args = parser.parse_args()
 
     seg_path = args.seg_path
     continue_training = args.continue_training
     val_path = args.validation_path
+    run_name = args.run_name
 
     # -----------------------------
     # End of the arguments
@@ -367,6 +375,7 @@ if __name__ == "__main__":
                 train_losses=train_losses,
                 epoch=epoch,
                 val_lossess=validation_losses,
+                run_name=run_name,
             )
 
     # Save the final model
@@ -376,6 +385,7 @@ if __name__ == "__main__":
         train_losses=train_losses,
         epoch=num_epochs,
         val_lossess=validation_losses,
+        run_name=run_name,
         is_final=True,
     )
     print("Training complete. Model saved.")

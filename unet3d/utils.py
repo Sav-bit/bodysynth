@@ -11,24 +11,38 @@ from skimage.color import label2rgb
 from torch import optim
 
 
-def save_checkpoint(state, is_best, checkpoint_dir):
-    """Saves model and training parameters at '{checkpoint_dir}/last_checkpoint.pytorch'.
-    If is_best==True saves '{checkpoint_dir}/best_checkpoint.pytorch' as well.
-
+def save_checkpoint(state, is_best, checkpoint_dir, title=None):
+    """
+    Saves model and training parameters to a checkpoint file in the given directory.
+    
+    If a title is provided, the checkpoint is saved with a filename that includes the title and the current epoch,
+    e.g. "<title>_epoch_<epoch>.pytorch". Otherwise, if no title is provided, it uses a default filename:
+    - "best_checkpoint.pytorch" if is_best is True,
+    - "last_checkpoint.pytorch" if is_best is False.
+    
+    Additionally, if is_best is True, a copy of the checkpoint is saved as "best_checkpoint.pytorch" regardless.
+    
     Args:
-        state (dict): contains model's state_dict, optimizer's state_dict, epoch
-            and best evaluation metric value so far
-        is_best (bool): if True state contains the best model seen so far
-        checkpoint_dir (string): directory where the checkpoint are to be saved
+        state (dict): Dictionary containing the model's state_dict, optimizer's state_dict, epoch, and best evaluation metric.
+        is_best (bool): True if the current state represents the best model so far.
+        checkpoint_dir (str): Directory where the checkpoint will be saved. The directory is created if it does not exist.
+        title (str, optional): Title of the experiment. If provided, the checkpoint filename will be suffixed with the epoch
+                               (e.g., "<title>_epoch_10.pytorch"). Defaults to None.
     """
 
     if not os.path.exists(checkpoint_dir):
         os.mkdir(checkpoint_dir)
+        
+    if title is not None:
+        epoch = state["epoch"]
+        title = f"{title}_epoch_{epoch}"
+    else:
+        title = "best_checkpoint" if is_best else "last_checkpoint"
 
-    last_file_path = os.path.join(checkpoint_dir, 'last_checkpoint.pytorch')
+    last_file_path = os.path.join(checkpoint_dir, f"{title}.pytorch")
     torch.save(state, last_file_path)
     if is_best:
-        best_file_path = os.path.join(checkpoint_dir, 'best_checkpoint.pytorch')
+        best_file_path = os.path.join(checkpoint_dir, "best_checkpoint.pytorch")
         shutil.copyfile(last_file_path, best_file_path)
 
 
