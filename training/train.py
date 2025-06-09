@@ -144,10 +144,16 @@ def merge_losses(dice_loss, cross_entropy_loss):
     Merges the two loss functions into one.
     """
 
-    def merged_loss(prediction, segs):
-        return dice_loss(prediction, segs) + cross_entropy_loss(
-            prediction, segs.long()
-        )
+    def merged_loss(prediction, segs_onehot):
+        # segs_onehot: LongTensor or FloatTensor, shape [N, C, D, H, W]
+        # 1) Dice wants [N,C,…] float probabilities / one-hot
+        dice_term = dice_loss(prediction, segs_onehot)
+
+        # 2) CE wants [N, D, H, W] LongTensor of class indices
+        labels = segs_onehot.argmax(dim=1)          # → [N, D, H, W]
+        ce_term = cross_entropy_loss(prediction, labels.long())
+
+        return dice_term + ce_term
 
     return merged_loss
 
@@ -165,7 +171,7 @@ def save_checkpoint_state(
         "val_loss": val_lossess,
     }
     is_best = False
-    utils.save_checkpoint(state, is_best, checkpoint_dir, run_name=run_name)
+    utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
     plot_loss(train_losses, val_lossess, save_plot=True)
 
 
@@ -219,10 +225,10 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Set static parameters
-    num_epochs = 1000  # How many epochs to train
+    num_epochs = 100  # How many epochs to train
     batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 100  # How many batches to load per epoch
-    patch_size = [180, 180, 180]
+    num_batches_per_epoch = 2  # How many batches to load per epoch
+    patch_size = [128, 128, 128]
     VALIDATION_INTERVAL = 10  # How often to validate the model
 
     # Get the data generator
