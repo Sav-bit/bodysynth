@@ -405,6 +405,7 @@ if __name__ == "__main__":
         epoch=num_epochs,
         val_lossess=validation_losses,
         run_name=run_name,
+        learning_rate=LEARNING_RATE,
         is_final=True,
         is_best=True,
     )
