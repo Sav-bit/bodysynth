@@ -111,9 +111,9 @@ def main():
          # which is required for the model to work correctly
          # as it was trained on images in this orientation.
         img = reorient(img, "PSR")
-    vol = img.get_fdata()
+    vol = img.get_fdata().astype(np.float32) # Load volume data as float32
     vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
-    vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score; customise if needed
+    vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score
 
     # 2. Load network
     model = load_model(Path(args.checkpoint), args.num_classes, device)
