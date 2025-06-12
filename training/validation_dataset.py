@@ -1,114 +1,112 @@
 import util
 import math
-import torch
+from pathlib import Path
+from typing import Sequence
+
 import nibabel as nib
 import numpy as np
+import torch
 import torch.nn.functional as F
 
 
 class ValidationDataset(torch.utils.data.Dataset):
+    """
+    Streams 3-D patches from a (C=1) MRI volume + segmentation.
+
+    Parameters
+    ----------
+    img, seg : str | Path
+        Paths to NIfTI files.
+    patch_size : (D, H, W) in voxels.
+    stride : optional patch stride.  default = patch_size // 2  (50 % overlap)
+    """
+
     def __init__(
         self,
-        img: str,
-        seg: str,
-        num_classes: int = 13, # Ernie Extended has 13 classes
-        patch_size: list[int] = [128, 128, 128],
+        img: str | Path,
+        seg: str | Path,
+        num_classes: int = 13,
+        patch_size: Sequence[int] = (128, 128, 128),
+        stride: Sequence[int] | None = None,
         device: str = "cpu",
-        dtype=torch.float32,
+        dtype: torch.dtype = torch.float32,
     ):
-        """
-        Args
-        ----
-        img, seg : paths to the NIfTI files
-        patch_size : 3-tuple [D, H, W] in voxels
-        """
         self.num_classes = num_classes
-        self.data, self.labels = self._load_img(
-            img, seg, patch_size=patch_size, device=device, dtype=dtype
+        self.patch_size = tuple(int(p) for p in patch_size)
+        self.stride = (
+            tuple(int(s) for s in stride) if stride is not None else tuple(p // 2 for p in patch_size)
         )
+        self.device = torch.device(device)
+        self.dtype = dtype
 
-    # ------------------------------------------------------------------ #
-    def _load_img(
-        self,
-        img_path: str,
-        seg_path: str,
-        patch_size: list[int],
-        device: str,
-        dtype,
-    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
-        """
-        Read a (C=1) MRI and its segmentation, pad to multiples of
-        patch_size, then extract overlapping patches (stride = patch/2).
+        # ------------------------------------------------------------------ #
+        # 1. read & normalise ------------------------------------------------
+        img_vol = nib.load(str(img)).get_fdata().astype(np.float32)
+        seg_vol = nib.load(str(seg)).get_fdata().astype(np.int64)
 
-        Returns
-        -------
-        images : list[Tensor]  – each tensor has shape (1, D, H, W)
-        labels : list[Tensor]  – shape (1, D, H, W) and dtype long
-        """
-        # ---------- load volumes ---------- #
-        img_vol = nib.load(img_path).get_fdata().astype(np.float32)
-        seg_vol = nib.load(seg_path).get_fdata().astype(np.int64)
-
-        # --------- optional intensity normalisation ---------- #
         img_vol = (img_vol - img_vol.mean()) / (img_vol.std() + 1e-8)
 
-        # shape: (D, H, W)
-        D, H, W = img_vol.shape
-        pz, py, px = patch_size
-        sz, sy, sx = [p // 2 for p in patch_size]  # 50 % overlap
+        # 2. pad so that the last patch fits ---------------------------------
+        self.img, self.seg = self._pad_volumes(img_vol, seg_vol)
 
-        # ---------- pad if needed so that the last patch fits ---------- #
+        # 3. pre-compute all patch start indices -----------------------------
+        self.starts = self._compute_patch_grid()
+
+    # ---------------------------------------------------------------------- #
+    #                          helper functions                               #
+    # ---------------------------------------------------------------------- #
+    def _pad_volumes(self, img: np.ndarray, seg: np.ndarray):
+        D, H, W = img.shape
+        pz, py, px = self.patch_size
+        sz, sy, sx = self.stride
+
         pad_D = (math.ceil(D / sz) * sz + pz - sz) - D
         pad_H = (math.ceil(H / sy) * sy + py - sy) - H
         pad_W = (math.ceil(W / sx) * sx + px - sx) - W
-        pad_width = (
-            (0, pad_D),
-            (0, pad_H),
-            (0, pad_W),
-        )
-        img_vol = np.pad(img_vol, pad_width, mode="edge")
-        seg_vol = np.pad(seg_vol, pad_width, mode="edge")
+        pad_width = ((0, pad_D), (0, pad_H), (0, pad_W))
 
-        D_pad, H_pad, W_pad = img_vol.shape
+        img = np.pad(img, pad_width, mode="edge")
+        seg = np.pad(seg, pad_width, mode="edge")
 
-        # ---------- extract patches ---------- #
-        img_patches: list[torch.Tensor] = []
-        seg_patches: list[torch.Tensor] = []
+        # keep one copy of each volume in RAM on the target device
+        img = torch.as_tensor(img, dtype=self.dtype, device=self.device)
+        seg = torch.as_tensor(seg, dtype=torch.long, device=self.device)
 
-        for z in range(0, D_pad - pz + 1, sz):
-            for y in range(0, H_pad - py + 1, sy):
-                for x in range(0, W_pad - px + 1, sx):
-                    # slicing
-                    iz, iy, ix = slice(z, z + pz), slice(y, y + py), slice(x, x + px)
+        return img, seg
 
-                    img_patch = torch.tensor(
-                        img_vol[iz, iy, ix], dtype=dtype, device=device
-                    ).unsqueeze(
-                        0
-                    )  # (1, D, H, W)
+    def _compute_patch_grid(self):
+        D, H, W = self.img.shape
+        pz, py, px = self.patch_size
+        sz, sy, sx = self.stride
 
-                    seg_patch = torch.tensor(
-                        seg_vol[iz, iy, ix], dtype=torch.int64, device=device
-                    )  # (D, H, W)
+        starts = [
+            (z, y, x)
+            for z in range(0, D - pz + 1, sz)
+            for y in range(0, H - py + 1, sy)
+            for x in range(0, W - px + 1, sx)
+        ]
+        return starts
 
-                    seg_patch_oh = F.one_hot(
-                        seg_patch, num_classes=self.num_classes
-                    )  # (D, H, W, C)
-
-                    seg_patch = seg_patch_oh.permute(3, 0, 1, 2)  # (C, D, H, W)
-
-                    img_patches.append(img_patch)
-                    seg_patches.append(seg_patch)
-
-        return img_patches, seg_patches
-
-    # ------------------------------------------------------------------ #
-
+    # ---------------------------------------------------------------------- #
+    #                        PyTorch Dataset API                              #
+    # ---------------------------------------------------------------------- #
     def __len__(self):
-        return len(self.data)
+        return len(self.starts)
 
     def __getitem__(self, idx):
-        return self.data[idx], self.labels[idx]
+        z, y, x = self.starts[idx]
+        pz, py, px = self.patch_size
+
+        iz, iy, ix = slice(z, z + pz), slice(y, y + py), slice(x, x + px)
+
+        # (1, D, H, W)
+        img_patch = self.img[iz, iy, ix].unsqueeze(0)
+
+        # one-hot ➜ (C, D, H, W) float32
+        seg_patch = self.seg[iz, iy, ix]
+        seg_patch = F.one_hot(seg_patch, self.num_classes).permute(3, 0, 1, 2).float()
+
+        return img_patch, seg_patch
 
 
 if __name__ == "__main__":
@@ -121,17 +119,17 @@ if __name__ == "__main__":
         num_classes=13,
     )
     print(f"Dataset size: {len(dataset)}")
-    img, seg = dataset[200]
+    img, seg = dataset[30]
     print(f"Image shape: {img.shape}, Segmentation shape: {seg.shape}")
 
     # Let's save the first image and segmentation patch to verify
-    # util.save_representation(
-    #     image=img,
-    #     title="test_image",
-    #     image_index=0,
-    # )
-    # util.save_representation(
-    #     image=seg,
-    #     title="test_segmentation",
-    #     image_index=0,
-    # )
+    util.save_representation(
+        image=img,
+        title="test_image",
+        image_index=0,
+    )
+    util.save_representation(
+        image=seg,
+        title="test_segmentation",
+        image_index=0,
+    )
