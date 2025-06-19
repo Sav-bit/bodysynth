@@ -6,7 +6,7 @@ import argparse
 from itertools import islice
 import torch
 from training.data_generator import DataGenerator
-from training.util import plot_loss
+from training.util import build_CE_weights, plot_loss
 from training.validation_dataset import ValidationDataset
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
@@ -113,16 +113,27 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     return model
 
 
-def get_losses():
+def get_losses(data_gen: DataGenerator = None):
     """
     Returns the loss criterion.
     For readability, the loss is hardcoded here.
     """
+    
+    if data_gen is not None:
+        freq = data_gen.get_class_frequencies()
+        ce_weights = build_CE_weights(
+            class_frequencies=freq,
+            num_classes=data_gen.get_num_classes(),
+        )
+        
+        
+    
     # Define your loss configuration
     dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
             "normalization": "softmax",
+            "weight": ce_weights if data_gen else None,
         }
     }
 
@@ -132,6 +143,7 @@ def get_losses():
         {
             "loss": {
                 "name": "CrossEntropyLoss",
+                "weight": ce_weights if data_gen else None,
             }
         }
     )
@@ -272,7 +284,7 @@ if __name__ == "__main__":
     )
 
     # Get the loss criterion
-    dice_loss, cross_entropy_loss = get_losses()
+    dice_loss, cross_entropy_loss = get_losses(data_gen.dataset)
 
     # Merge the two loss functions
     criterion = merge_losses(dice_loss, cross_entropy_loss)

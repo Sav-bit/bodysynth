@@ -3,10 +3,11 @@ from typing import Tuple
 import torch
 import nibabel as nib
 import brainsynth
-from training.util import save_representation
+from training.util import build_CE_weights, save_representation
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
+import numpy as np
 
 """
 Remember in this file:
@@ -196,8 +197,18 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # Check if the patch is mostly background
         return num_non_background / num_total_pixels < threshold
 
-    # ---------------- test ----------------
+    
+    def get_class_frequencies(self) -> dict[int, float]:
+        """
+        Returns a dictiornay with the class frequencies in the original segmentation.
+        The keys are the class labels and the values are the frequencies.
+        """
+        seg = self.get_original_segmentation().squeeze(0).cpu().numpy()
+        unique, counts = np.unique(seg, return_counts=True)
+        frequencies = dict(zip(unique, counts / seg.size))
+        return frequencies
 
+    # ---------------- test ----------------
 
 if __name__ == "__main__":
 
@@ -221,6 +232,19 @@ if __name__ == "__main__":
     i = 0
 
     num_classes = data_gen.get_original_segmentation().max() + 1
+    
+    print(f"Number of classes: {num_classes}")
+    
+    print(f"Class frequencies: {data_gen.get_class_frequencies()}")
+    
+    ce_weights = build_CE_weights(
+        class_frequencies=data_gen.get_class_frequencies(),
+        num_classes=num_classes,
+    )
+    
+    print(f"CE weights: {ce_weights}")
+    print(f"CE weights shape: {ce_weights.shape}")
+    
 
     model: AbstractUNet = UNet3D(
         in_channels=1,
@@ -245,7 +269,7 @@ if __name__ == "__main__":
         "loss": {
             "name": "DiceLoss",
             "normalization": "sigmoid",
-            # additional parameters can go here if needed...
+            "weight": ce_weights,
         }
     }
 
