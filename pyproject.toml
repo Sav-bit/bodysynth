@@ -15,6 +15,7 @@ dependencies = [
     "scikit-image",
     "matplotlib",
     "monai",
+    "torchio",
 ]
 
 [build-system]

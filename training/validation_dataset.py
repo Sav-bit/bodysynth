@@ -7,6 +7,9 @@ import nibabel as nib
 import numpy as np
 import torch
 import torch.nn.functional as F
+from training.transform import create_transforms
+import torchio as tio
+
 
 
 class ValidationDataset(torch.utils.data.Dataset):
@@ -30,6 +33,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         stride: Sequence[int] | None = None,
         device: str = "cpu",
         dtype: torch.dtype = torch.float32,
+        training_mode: bool = False,
     ):
         self.num_classes = num_classes
         self.patch_size = tuple(int(p) for p in patch_size)
@@ -51,6 +55,9 @@ class ValidationDataset(torch.utils.data.Dataset):
 
         # 3. pre-compute all patch start indices -----------------------------
         self.starts = self._compute_patch_grid()
+        self.training_mode = training_mode
+        if self.training_mode:
+            self.transform = create_transforms()
 
     # ---------------------------------------------------------------------- #
     #                          helper functions                               #
@@ -105,6 +112,15 @@ class ValidationDataset(torch.utils.data.Dataset):
         # one-hot ➜ (C, D, H, W) float32
         seg_patch = self.seg[iz, iy, ix]
         seg_patch = F.one_hot(seg_patch, self.num_classes).permute(3, 0, 1, 2).float()
+        
+        if self.training_mode and self.transform:
+            t1 = tio.ScalarImage(tensor=img_patch)
+            seg = tio.LabelMap(tensor=seg_patch)
+            subject = tio.Subject(t1=t1, seg=seg)
+            subject = self.transform(subject)
+            img_patch = subject.t1.data
+            seg_patch = subject.seg.data
+            
 
         return img_patch, seg_patch
 
@@ -117,6 +133,7 @@ if __name__ == "__main__":
         patch_size=[128, 128, 128],
         device="cpu",
         num_classes=13,
+        training_mode=True,  # Set to True if you want to apply transformations
     )
     print(f"Dataset size: {len(dataset)}")
     img, seg = dataset[30]
