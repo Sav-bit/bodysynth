@@ -52,36 +52,20 @@ class DataGenerator(torch.utils.data.IterableDataset):
             )
         )
 
-    def _get_out_size(self) -> list[int]:
-
-        segmentation_size = self.get_original_segmentation().shape[1:]
-
-        # The synthesizer requires the output size to be even
-        next_even_number = lambda x: x if x % 2 == 0 else x + 1
-
-        out_size = [next_even_number(x) for x in segmentation_size]
-
-        return out_size
-
-    def load_data(self) -> Tuple[dict[str, torch.Tensor], torch.Tensor]:
-        """
-        Loads the segmentation data from the specified NIfTI file.
-
+    def load_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """ Loads the segmentation data from the NIfTI file.
         Returns:
-            dict[str, torch.Tensor]: A dictionary with key "segmentation"
-            and its value as a 4D torch.Tensor (1, D, H, W).
-            torch.Tensor: The affine transformation matrix of the NIfTI file.
+            Tuple[np.ndarray, np.ndarray]: A tuple containing the segmentation data and the affine transformation matrix.
         """
+
         img = nib.load(self.seg_dir)
-        data = img.get_fdata()
-        data = torch.tensor(data, device=self.device, dtype=torch.int64).unsqueeze(0)
-        return dict(segmentation=data), img.affine
+        return img.get_fdata().astype(np.int64), img.affine
 
     def get_original_segmentation(self) -> torch.Tensor:
         """
         Returns the original segmentation data.
         """
-        return self.original_data["segmentation"]
+        return self.original_data
 
     def __iter__(self):
         """
@@ -140,14 +124,14 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         Returns the number of classes in the segmentation data.
         """
-        return self.get_original_segmentation().max() + 1
+        return int(self.get_original_segmentation().max() + 1)
 
     def get_random_patch(self) -> torch.tensor:
 
         seg = self.get_original_segmentation()
 
         # Get the shape of the image
-        _, D, H, W = seg.shape
+        D, H, W = seg.shape
 
         isMostBackground = True
 
@@ -162,7 +146,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
             w = torch.randint(0, W - total_patch_size[2], (1,))
 
             segmentation_patch = seg[
-                :,
                 d : d + total_patch_size[0],
                 h : h + total_patch_size[1],
                 w : w + total_patch_size[2],
@@ -173,6 +156,9 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 segmentation_patch,
                 threshold=0.2,
             )
+            
+        # Convert the patch to a tensor and move it to the device
+        segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
 
         return segmentation_patch
 
@@ -184,16 +170,16 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
     def _is_mostly_background(
         self,
-        patch: torch.Tensor,
+        patch: np.ndarray,
         threshold=0.2,
     ) -> bool:
         """
         Check if the patch is mostly background
         """
         # Count the number of non-background pixels
-        num_non_background = (patch != 0).sum().item()
+        num_non_background = np.count_nonzero(patch > 0)
         # Count the total number of pixels in the patch
-        num_total_pixels = patch.numel()
+        num_total_pixels = patch.size
         # Check if the patch is mostly background
         return num_non_background / num_total_pixels < threshold
 
@@ -203,7 +189,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         Returns a dictiornay with the class frequencies in the original segmentation.
         The keys are the class labels and the values are the frequencies.
         """
-        seg = self.get_original_segmentation().squeeze(0).cpu().numpy()
+        seg = self.get_original_segmentation()
         unique, counts = np.unique(seg, return_counts=True)
         frequencies = dict(zip(unique, counts / seg.size))
         return frequencies
@@ -231,7 +217,7 @@ if __name__ == "__main__":
 
     i = 0
 
-    num_classes = data_gen.get_original_segmentation().max() + 1
+    num_classes = data_gen.get_num_classes()
     
     print(f"Number of classes: {num_classes}")
     
@@ -279,11 +265,11 @@ if __name__ == "__main__":
         affine_matrix=data_gen.get_affine(),
     )
 
-    save_representation(
-        image=data_gen.get_original_segmentation(),
-        title="Original_segmentation",
-        affine_matrix=data_gen.get_affine(),
-    )
+    # save_representation(
+    #     image=data_gen.get_original_segmentation(),
+    #     title="Original_segmentation",
+    #     affine_matrix=data_gen.get_affine(),
+    # )
 
     print(f"Original affine: {data_gen.get_affine()}")
 
@@ -299,6 +285,11 @@ if __name__ == "__main__":
         count_batches = 0
         for images, segs in islice(loader, num_batches_per_epoch):
             print(f"I'm in the loop")
+            
+            predicted = model(images)
+            print(f"Predicted shape: {predicted.shape}")
+            print(f"Images shape: {images.shape}")
+            
 
             print(f"Image shape: {images.shape}")
             print(f"Segmentation shape: {segs.shape}")
@@ -307,14 +298,14 @@ if __name__ == "__main__":
                 seg = segs[j]
 
                 # Save the image and segmentation
-                save_representation(
-                    image=image,
-                    title=f"image_{i}_{count_batches}_{j}",
-                )
-                save_representation(
-                    image=seg,
-                    title=f"segmentation_{i}_{count_batches}_{j}",
-                )
+                # save_representation(
+                #     image=image,
+                #     title=f"image_{i}_{count_batches}_{j}",
+                # )
+                # save_representation(
+                #     image=seg,
+                #     title=f"segmentation_{i}_{count_batches}_{j}",
+                # )
 
             # save_representation(
             #     image=image,
