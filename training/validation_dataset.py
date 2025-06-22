@@ -99,9 +99,10 @@ class ValidationDataset(torch.utils.data.Dataset):
         Returns a dictiornay with the class frequencies in the original segmentation.
         The keys are the class labels and the values are the frequencies.
         """
-        seg = self.seg
+        seg = self.seg.seg.cpu().numpy()
         unique, counts = np.unique(seg, return_counts=True)
         frequencies = dict(zip(unique, counts / seg.size))
+        frequencies = {int(k): v for k, v in frequencies.items()}
         return frequencies
     
     def get_num_classes(self) -> int:
