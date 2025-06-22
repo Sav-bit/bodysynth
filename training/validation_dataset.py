@@ -99,7 +99,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         Returns a dictiornay with the class frequencies in the original segmentation.
         The keys are the class labels and the values are the frequencies.
         """
-        seg = self.seg.seg.cpu().numpy()
+        seg = self.seg.cpu().numpy()
         unique, counts = np.unique(seg, return_counts=True)
         frequencies = dict(zip(unique, counts / seg.size))
         frequencies = {int(k): v for k, v in frequencies.items()}
@@ -157,13 +157,17 @@ if __name__ == "__main__":
     print(f"Image shape: {img.shape}, Segmentation shape: {seg.shape}")
 
     # Let's save the first image and segmentation patch to verify
-    util.save_representation(
-        image=img,
-        title="test_image",
-        image_index=0,
-    )
-    util.save_representation(
-        image=seg,
-        title="test_segmentation",
-        image_index=0,
-    )
+    # util.save_representation(
+    #     image=img,
+    #     title="test_image",
+    #     image_index=0,
+    # )
+    # util.save_representation(
+    #     image=seg,
+    #     title="test_segmentation",
+    #     image_index=0,
+    # )
+    
+    #test the class frequencies
+    frequencies = dataset.get_class_frequencies()
+    print(f"Class frequencies: {frequencies}")
