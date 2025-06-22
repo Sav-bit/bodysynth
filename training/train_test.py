@@ -55,7 +55,7 @@ def get_data_generator(
         img=image_path,
         seg=seg_path,
         patch_size=patch_size,
-        device=device,
+        device="cpu",
         training_mode=True,  # Set to True for training mode
     )
 
