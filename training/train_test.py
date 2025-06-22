@@ -218,7 +218,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--validation_path",
         type=str,
-        default=None,
+        required=True,
         help="Path to the validation data (optional)",
     )
 
@@ -272,6 +272,7 @@ if __name__ == "__main__":
     data_gen = get_data_generator(
         seg_path=seg_path,
         batch_size=batch_size,
+        image_path=val_path,
         device=device,
         num_workers=0,
         patch_size=patch_size,
