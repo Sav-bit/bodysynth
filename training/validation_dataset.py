@@ -93,6 +93,22 @@ class ValidationDataset(torch.utils.data.Dataset):
             for x in range(0, W - px + 1, sx)
         ]
         return starts
+    
+    def get_class_frequencies(self) -> dict[int, float]:
+        """
+        Returns a dictiornay with the class frequencies in the original segmentation.
+        The keys are the class labels and the values are the frequencies.
+        """
+        seg = self.seg
+        unique, counts = np.unique(seg, return_counts=True)
+        frequencies = dict(zip(unique, counts / seg.size))
+        return frequencies
+    
+    def get_num_classes(self) -> int:
+        """
+        Returns the number of classes in the segmentation.
+        """
+        return self.num_classes
 
     # ---------------------------------------------------------------------- #
     #                        PyTorch Dataset API                              #

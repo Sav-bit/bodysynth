@@ -6,7 +6,7 @@ import argparse
 from itertools import islice
 import torch
 from training.data_generator import DataGenerator
-from training.util import plot_loss
+from training.util import build_CE_weights, plot_loss
 from training.validation_dataset import ValidationDataset
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
@@ -14,6 +14,8 @@ from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 import copy
+import wandb
+
 
 
 def get_device() -> torch.device:
@@ -115,16 +117,25 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     return model
 
 
-def get_losses():
+def get_losses(data_gen : ValidationDataset = None) -> tuple:
     """
     Returns the loss criterion.
     For readability, the loss is hardcoded here.
     """
+    
+    if data_gen is not None:
+        freq = data_gen.get_class_frequencies()
+        ce_weights = build_CE_weights(
+            class_frequencies=freq,
+            num_classes=data_gen.get_num_classes(),
+        )
+    
     # Define your loss configuration
     dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
             "normalization": "softmax",
+            "weight": ce_weights if data_gen else None,
         }
     }
 
@@ -134,6 +145,7 @@ def get_losses():
         {
             "loss": {
                 "name": "CrossEntropyLoss",
+                "weight": ce_weights if data_gen else None,
             }
         }
     )
@@ -242,6 +254,19 @@ if __name__ == "__main__":
     patch_size = [150, 150, 150]
     VALIDATION_INTERVAL = 10  # How often to validate the model
     LEARNING_RATE = 3e-4  # Learning rate for the optimizer
+    
+    run = wandb.init(
+        project="bodysynth",
+        name=run_name if run_name else "UNet3D Training w TorchIO",
+        config={
+            "num_epochs": num_epochs,
+            "batch_size": batch_size,
+            "num_batches_per_epoch": num_batches_per_epoch,
+            "patch_size": patch_size,
+            "validation_interval": VALIDATION_INTERVAL,
+            "learning_rate": LEARNING_RATE,
+        },
+    )
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -268,13 +293,15 @@ if __name__ == "__main__":
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
+    
+    wandb.watch(model, log="all")
 
     print(
         f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}"
     )
 
     # Get the loss criterion
-    dice_loss, cross_entropy_loss = get_losses()
+    dice_loss, cross_entropy_loss = get_losses(data_gen.dataset)
 
     # Merge the two loss functions
     criterion = merge_losses(dice_loss, cross_entropy_loss)
@@ -344,6 +371,7 @@ if __name__ == "__main__":
         train_losses[epoch + 1] = epoch_loss
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+        wandb.log({"epoch": epoch + 1, "loss": epoch_loss})
 
         # scheduler.step()
 
@@ -359,6 +387,7 @@ if __name__ == "__main__":
                     val_losses.append(val_loss.item())
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
+                wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
                 validation_losses[epoch + 1] = avg_val_loss
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————

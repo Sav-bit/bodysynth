@@ -14,6 +14,7 @@ from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 import copy
+import wandb
 
 
 def get_device() -> torch.device:
@@ -237,6 +238,7 @@ if __name__ == "__main__":
     # -----------------------------
     # End of the arguments
     # -----------------------------
+    
 
     # Check the PyTorch version
     print("PyTorch version:", torch.__version__)
@@ -252,6 +254,20 @@ if __name__ == "__main__":
     patch_size = [150, 150, 150]
     VALIDATION_INTERVAL = 10  # How often to validate the model
     LEARNING_RATE = 3e-4  # Learning rate for the optimizer
+
+    run = wandb.init(
+        project="bodysynth",
+        name=run_name if run_name else "UNet3D Training w BodySynth",
+        config={
+            "num_epochs": num_epochs,
+            "batch_size": batch_size,
+            "num_batches_per_epoch": num_batches_per_epoch,
+            "patch_size": patch_size,
+            "validation_interval": VALIDATION_INTERVAL,
+            "learning_rate": LEARNING_RATE,
+        },
+    )
+            
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -278,6 +294,8 @@ if __name__ == "__main__":
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
+
+    wandb.watch(model, log="all")
 
     print(
         f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}"
@@ -354,6 +372,7 @@ if __name__ == "__main__":
         train_losses[epoch + 1] = epoch_loss
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+        wandb.log({"epoch": epoch + 1, "loss": epoch_loss})
 
         # scheduler.step()
 
@@ -369,6 +388,7 @@ if __name__ == "__main__":
                     val_losses.append(val_loss.item())
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
+                wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
                 validation_losses[epoch + 1] = avg_val_loss
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
