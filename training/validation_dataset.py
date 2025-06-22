@@ -135,10 +135,9 @@ class ValidationDataset(torch.utils.data.Dataset):
             seg = tio.LabelMap(tensor=seg_patch)
             subject = tio.Subject(t1=t1, seg=seg)
             subject = self.transform(subject)
-            img_patch = subject.t1.data
-            seg_patch = subject.seg.data
+            img_patch = subject.t1.data.to(device=self.device)
+            seg_patch = subject.seg.data.to(device=self.device)
             
-
         return img_patch, seg_patch
 
 
