@@ -17,7 +17,6 @@ import copy
 import wandb
 
 
-
 def get_device() -> torch.device:
     """
     Returns the device to be used for training as a torch.device.
@@ -117,19 +116,19 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     return model
 
 
-def get_losses(data_gen : ValidationDataset = None) -> tuple:
+def get_losses(data_gen: ValidationDataset = None) -> tuple:
     """
     Returns the loss criterion.
     For readability, the loss is hardcoded here.
     """
-    
+
     if data_gen is not None:
         freq = data_gen.get_class_frequencies()
         ce_weights = build_CE_weights(
             class_frequencies=freq,
             num_classes=data_gen.get_num_classes(),
         )
-    
+
     # Define your loss configuration
     dice_loss_config = {
         "loss": {
@@ -254,7 +253,7 @@ if __name__ == "__main__":
     patch_size = [150, 150, 150]
     VALIDATION_INTERVAL = 10  # How often to validate the model
     LEARNING_RATE = 3e-4  # Learning rate for the optimizer
-    
+
     run = wandb.init(
         project="bodysynth",
         name=run_name if run_name else "UNet3D Training w TorchIO",
@@ -294,7 +293,7 @@ if __name__ == "__main__":
 
     # Get the model
     model = get_model(data_gen=data_gen).to(device=device)
-    
+
     wandb.watch(model, log="all")
 
     print(
@@ -353,7 +352,7 @@ if __name__ == "__main__":
 
         # The data generator is infinite, so we need to limit the number of batches
         for images, segs in data_gen:
-            
+
             images = images.to(device)
             segs = segs.to(device)
 
@@ -375,7 +374,7 @@ if __name__ == "__main__":
         train_losses[epoch + 1] = epoch_loss
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
-        wandb.log({"epoch": epoch + 1, "loss": epoch_loss})
+        wandb.log({"epoch": epoch + 1, "train/loss": epoch_loss})
 
         # scheduler.step()
 
@@ -391,7 +390,7 @@ if __name__ == "__main__":
                     val_losses.append(val_loss.item())
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
-                wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
+                wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————

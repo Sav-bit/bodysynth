@@ -372,7 +372,7 @@ if __name__ == "__main__":
         train_losses[epoch + 1] = epoch_loss
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
-        wandb.log({"epoch": epoch + 1, "loss": epoch_loss})
+        wandb.log({"epoch": epoch + 1, "train/loss": epoch_loss})
 
         # scheduler.step()
 
@@ -388,7 +388,7 @@ if __name__ == "__main__":
                     val_losses.append(val_loss.item())
                 avg_val_loss = sum(val_losses) / len(val_losses)
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
-                wandb.log({"val_loss": avg_val_loss, "epoch": epoch + 1})
+                wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
