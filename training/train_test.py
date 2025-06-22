@@ -353,6 +353,9 @@ if __name__ == "__main__":
 
         # The data generator is infinite, so we need to limit the number of batches
         for images, segs in data_gen:
+            
+            images = images.to(device)
+            segs = segs.to(device)
 
             optimizer.zero_grad()
 
