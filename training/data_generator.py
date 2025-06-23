@@ -61,7 +61,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         img = nib.load(self.seg_dir)
         return img.get_fdata().astype(np.int64), img.affine
 
-    def get_original_segmentation(self) -> torch.Tensor:
+    def get_original_segmentation(self) -> np.ndarray:
         """
         Returns the original segmentation data.
         """

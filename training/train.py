@@ -134,7 +134,6 @@ def get_losses(data_gen: DataGenerator = None):
         "loss": {
             "name": "DiceLoss",
             "normalization": "softmax",
-            "weight": ce_weights if data_gen else None,
         }
     }
 
