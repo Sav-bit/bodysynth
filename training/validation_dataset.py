@@ -1,3 +1,4 @@
+from itertools import islice
 import util
 import math
 from pathlib import Path
@@ -9,6 +10,7 @@ import torch
 import torch.nn.functional as F
 from training.transform import create_transforms
 import torchio as tio
+from torch.utils.data import DataLoader
 
 
 
@@ -118,6 +120,11 @@ class ValidationDataset(torch.utils.data.Dataset):
         return len(self.starts)
 
     def __getitem__(self, idx):
+        
+        if self.training_mode :
+            #Get a random index if in training mode
+            idx = torch.randint(0, len(self.starts), (1,)).item()
+        
         z, y, x = self.starts[idx]
         pz, py, px = self.patch_size
 
@@ -170,3 +177,16 @@ if __name__ == "__main__":
     #test the class frequencies
     frequencies = dataset.get_class_frequencies()
     print(f"Class frequencies: {frequencies}")
+    
+    data_loader = DataLoader(
+        dataset,
+        batch_size=2,
+        num_workers=0,
+        pin_memory=False,
+    )
+    
+    num_batches_per_epoch = 4
+    
+    print(f"DataLoader size: {len(data_loader)}")
+    for images, segs in islice(data_loader, num_batches_per_epoch):
+        print(f"Batch image shape: {images.shape}, Batch segmentation shape: {segs.shape}")

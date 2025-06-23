@@ -227,7 +227,7 @@ if __name__ == "__main__":
         batch_losses = []
 
         # The data generator is infinite, so we need to limit the number of batches
-        for images, segs in data_gen:
+        for images, segs in islice(data_gen, num_batches_per_epoch):
 
             images = images.to(device)
             segs = segs.to(device)
