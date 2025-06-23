@@ -15,21 +15,13 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 import copy
 import wandb
-
-
-def get_device() -> torch.device:
-    """
-    Returns the device to be used for training as a torch.device.
-    MPS is disabled because it throws error for the convolution on my stupid pc 😡
-    """
-    # if torch.backends.mps.is_available():
-    #     print("MPS is available")
-    #     return torch.device("mps")
-
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
+from training.train_util import (
+    get_device,
+    get_model,
+    get_losses,
+    merge_losses,
+    save_checkpoint_state,
+)
 
 
 def get_data_generator(
@@ -88,117 +80,9 @@ def get_validation_data_loader(
     )
 
 
-def get_model(data_gen: DataLoader) -> AbstractUNet:
-    """
-    Returns the UNet3D model.
-    For readability, the network architecture is hardcoded here.
-    """
-    model = UNet3D(
-        in_channels=1,
-        out_channels=data_gen.dataset.get_num_classes(),
-        f_maps=(32, 64, 128, 256, 512),
-        layer_order="cgr",
-        num_groups=8,
-        final_sigmoid=False,
-        conv_kernel_size=3,
-        pool_kernel_size=2,
-        conv_padding=1,
-        conv_upscale=2,
-        upsample="deconv",
-        num_levels=5,
-        dropout_prob=0.0,
-        is_segmentation=True,
-        is3d=True,
-    )
-
-    return model
-
-
-def get_losses(data_gen: DataGenerator = None):
-    """
-    Returns the loss criterion.
-    For readability, the loss is hardcoded here.
-    """
-    
-    if data_gen is not None:
-        freq = data_gen.get_class_frequencies()
-        ce_weights = build_CE_weights(
-            class_frequencies=freq,
-            num_classes=data_gen.get_num_classes(),
-        )
-        
-        
-    
-    # Define your loss configuration
-    dice_loss_config = {
-        "loss": {
-            "name": "DiceLoss",
-            "normalization": "softmax",
-        }
-    }
-
-    dice_loss = get_loss_criterion(dice_loss_config)
-
-    cross_entropy_loss = get_loss_criterion(
-        {
-            "loss": {
-                "name": "CrossEntropyLoss",
-                "weight": ce_weights if data_gen else None,
-            }
-        }
-    )
-
-    # Create the loss criterion
-    return dice_loss, cross_entropy_loss
-
-
-def merge_losses(dice_loss, cross_entropy_loss):
-    """
-    Merges the two loss functions into one.
-    """
-
-    def merged_loss(prediction, segs_onehot):
-        # segs_onehot: LongTensor or FloatTensor, shape [N, C, D, H, W]
-        # 1) Dice wants [N,C,…] float probabilities / one-hot
-        dice_term = dice_loss(prediction, segs_onehot)
-
-        # 2) CE wants [N, D, H, W] LongTensor of class indices
-        labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
-        ce_term = cross_entropy_loss(prediction, labels.long())
-
-        return dice_term + ce_term
-
-    return merged_loss
-
-
-def save_checkpoint_state(
-    model,
-    optimizer,
-    train_losses,
-    epoch,
-    learning_rate,
-    is_final=False,
-    val_lossess=None,
-    run_name=None,
-    is_best=False,
-):
-    checkpoint_dir = "./checkpoints"
-    state = {
-        "epoch": epoch,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "loss": train_losses,
-        "is_final": is_final,
-        "val_loss": val_lossess,
-        "learning_rate": learning_rate,
-    }
-    utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
-    plot_loss(train_losses, val_lossess, save_plot=True, run_name=run_name)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Train UNet3D with a segmentation path"
+        description="Train UNet3D with a segmentation path and brainSynth image generator."
     )
     parser.add_argument(
         "--seg_path",
@@ -237,7 +121,6 @@ if __name__ == "__main__":
     # -----------------------------
     # End of the arguments
     # -----------------------------
-    
 
     # Check the PyTorch version
     print("PyTorch version:", torch.__version__)
@@ -266,7 +149,6 @@ if __name__ == "__main__":
             "learning_rate": LEARNING_RATE,
         },
     )
-            
 
     # Get the data generator
     data_gen = get_data_generator(
@@ -296,15 +178,11 @@ if __name__ == "__main__":
 
     wandb.watch(model, log="all")
 
-    print(
-        f"[DEBUG...] The number of classes in the model: {data_gen.dataset.get_num_classes()}"
-    )
-
     # Get the loss criterion
     dice_loss, cross_entropy_loss = get_losses(data_gen.dataset)
 
     # Merge the two loss functions
-    criterion = merge_losses(dice_loss, cross_entropy_loss)
+    criterion = merge_losses(dice_loss, cross_entropy_loss, model)
 
     # Get the optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -315,6 +193,8 @@ if __name__ == "__main__":
     last_epoch = 0
 
     if continue_training:
+        # TODO fix this, there is no last_checkpoint.pytorch file anymore
+
         retrieved_state = utils.load_checkpoint(
             "./checkpoints/last_checkpoint.pytorch",
             model,
@@ -354,6 +234,9 @@ if __name__ == "__main__":
         for images, segs in islice(data_gen, num_batches_per_epoch):
 
             optimizer.zero_grad()
+
+            # Normalize the images performing zscore normalization
+            images = (images - images.mean()) / (images.std() + 1e-6)
 
             # Forward pass
             prediction = model(images)
