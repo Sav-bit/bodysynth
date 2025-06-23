@@ -126,7 +126,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         return int(self.get_original_segmentation().max() + 1)
 
-    def get_random_patch(self) -> torch.tensor:
+    def get_random_patch(self) -> torch.Tensor:
 
         seg = self.get_original_segmentation()
 
@@ -138,12 +138,16 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # calculate the total patch size
         # patch size + padding
         total_patch_size = [x + self.padding for x in self.patch_size]
+        
+        #The network need to see some background, so we will randomly flip the isMostBackground flag
+        # with a probability of 0.15
+        do_i_want_background = torch.rand(1).item() < 0.15
 
         while isMostBackground:
             # Get random coordinates for the patch
-            d = torch.randint(0, D - total_patch_size[0], (1,))
-            h = torch.randint(0, H - total_patch_size[1], (1,))
-            w = torch.randint(0, W - total_patch_size[2], (1,))
+            d = torch.randint(0, D - total_patch_size[0] + 1, (1,))
+            h = torch.randint(0, H - total_patch_size[1] + 1, (1,))
+            w = torch.randint(0, W - total_patch_size[2] + 1, (1,))
 
             segmentation_patch = seg[
                 d : d + total_patch_size[0],
@@ -156,6 +160,10 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 segmentation_patch,
                 threshold=0.2,
             )
+            
+            if do_i_want_background:
+                # If we want background, we will stop when the patch is mostly background
+                isMostBackground = not isMostBackground
             
         # Convert the patch to a tensor and move it to the device
         segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
