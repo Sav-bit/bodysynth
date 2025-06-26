@@ -110,21 +110,34 @@ def plot_loss(
 def build_CE_weights(
     class_frequencies: dict[int, float],
     num_classes: int,
+    mode = "median",
 ) -> list[float]:
     """
     Build class weights for CrossEntropyLoss based on class frequencies
     Args:
         class_frequencies (dict[int, float]): Dictionary with class frequencies.
         num_classes (int): Total number of classes.
-        device (torch.device): Device to place the weights on.
+        mode (str): The mode to use for calculating weights. Default is "median".
+                    Other options are sqrt and inverse.
+        
     Returns:
-        torch.Tensor: Tensor of class weights.
+        list[float] of class weights.
     """
-    weights = np.zeros(num_classes, dtype=np.float32)
+    # weights = np.zeros(num_classes, dtype=np.float32)
+    weights = np.ones(num_classes, dtype=np.float32)
     for class_id, frequency in class_frequencies.items():
-        if class_id < num_classes:
-            weights[class_id] = 1.0 / frequency if frequency > 0 else 0.0
+        if class_id < num_classes and frequency > 0:
+            weights[class_id] = frequency
+            
+    if mode == "median":
+        weights = np.median(weights) / weights # median / frequency
+    elif mode == "sqrt":
+        weights = 1.0 / np.sqrt(weights)
+    else: # Inverse
+        weights = 1.0 / weights
+        
     # Normalize weights to sum to 1
-    weights /= weights.sum()
+    # weights = weights / np.sum(weights)
+
     return weights
 
