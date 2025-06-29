@@ -22,6 +22,7 @@ from training.train_util import (
     merge_losses,
     save_checkpoint_state,
 )
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 def get_data_generator(
@@ -111,6 +112,8 @@ if __name__ == "__main__":
         help="Name of the run for logging purposes",
     )
 
+    parser.add_argument("--patch_size", type=int, nargs=3, default=[170, 170, 170])
+
     args = parser.parse_args()
 
     seg_path = args.seg_path
@@ -133,8 +136,9 @@ if __name__ == "__main__":
     num_epochs = 5000  # How many epochs to train
     batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 10  # How many batches to load per epoch
-    patch_size = [150, 150, 150]
-    VALIDATION_INTERVAL = 10  # How often to validate the model
+    patch_size = args.patch_size
+
+    VALIDATION_INTERVAL = 2  # How often to validate the model
     LEARNING_RATE = 3e-4  # Learning rate for the optimizer
 
     run = wandb.init(
@@ -214,14 +218,27 @@ if __name__ == "__main__":
         if "val_loss" in retrieved_state:
             validation_losses = retrieved_state["val_loss"]
 
-    # scheduler = StepLR(optimizer, step_size=50, gamma=0.2, last_epoch=last_epoch - 1)
-
     # Early-stop settings
     best_val_loss = float("inf")
     best_model_wts = copy.deepcopy(model.state_dict())
-    patience = 60  # epochs to wait for an improvement
-    min_delta = 5e-3  # minimum drop in loss to count as “improvement”
+    SCHED_PATIENCE = (
+        5  # epochs to wait for an improvement before reducing the learning rate
+    )
+    EARLYSTOP_PATIENCE = 3 * SCHED_PATIENCE  # epochs to wait for an improvement
+    min_delta = 1e-3  # minimum drop in loss to count as “improvement”
     patience_counter = 0
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=0.3,  # LR ← LR × 0.3
+        patience=SCHED_PATIENCE,
+        threshold=min_delta,  # same definition of “improve” as early-stop
+        threshold_mode="rel",
+        cooldown=1,
+        min_lr=1e-5,
+        verbose=True,
+    )
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
@@ -272,6 +289,8 @@ if __name__ == "__main__":
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
                 wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
+                scheduler.step(avg_val_loss)                     
+                wandb.log({"lr": optimizer.param_groups[0]["lr"]})
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
             # Delete the last‐used validation tensors so they drop out of scope:
@@ -292,7 +311,7 @@ if __name__ == "__main__":
             else:
                 patience_counter += 1
 
-            if patience_counter >= patience:
+            if patience_counter >= EARLYSTOP_PATIENCE:
                 print(
                     f"Early stopping at epoch {epoch+1} :Best val loss: {best_val_loss:.4f}"
                 )

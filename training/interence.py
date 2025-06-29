@@ -33,6 +33,7 @@ def get_orientation(nii: nib.Nifti1Image) -> tuple[str, str, str]:
     orientation = nib.aff2axcodes(nii.affine)
     return orientation
 
+
 def reorient(
     nii: nib.Nifti1Image,
     orientation: str | tuple[str, str, str] = "RAS",
@@ -76,6 +77,7 @@ def load_model(checkpoint_path: Path, num_classes: int, device: torch.device) ->
     model.eval()
     return model
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Sliding‑window inference for 3‑D UNet"
@@ -92,7 +94,7 @@ def main():
     parser.add_argument(
         "--num_classes", type=int, default=13, help="Number of target classes"
     )
-    parser.add_argument("--patch_size", type=int, nargs=3, default=[180, 180, 180])
+    parser.add_argument("--patch_size", type=int, nargs=3, default=[170, 170, 170])
     parser.add_argument(
         "--sw_batch_size", type=int, default=1, help="How many patches per GPU batch"
     )
@@ -106,12 +108,12 @@ def main():
     img = nib.load(args.image_path)
     if get_orientation(img) != ("P", "S", "R"):
         print("Reorienting image to PSR orientation...")
-         # Reorient to PSR (Posterior-Superior-Right) orientation
-         # This is the same as Ernie Extended's orientation
-         # which is required for the model to work correctly
-         # as it was trained on images in this orientation.
+        # Reorient to PSR (Posterior-Superior-Right) orientation
+        # This is the same as Ernie Extended's orientation
+        # which is required for the model to work correctly
+        # as it was trained on images in this orientation.
         img = reorient(img, "PSR")
-    vol = img.get_fdata().astype(np.float32) # Load volume data as float32
+    vol = img.get_fdata().astype(np.float32)  # Load volume data as float32
     vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
     vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score
 
@@ -129,10 +131,10 @@ def main():
     #     sw_batch_size=args.sw_batch_size,
     #     device=device,
     # )
-    
+
     with torch.no_grad():
         seg_probs = sliding_window_inference(
-            inputs =vol_tensor,
+            inputs=vol_tensor,
             roi_size=patch_size,
             sw_batch_size=args.sw_batch_size,
             predictor=model,
@@ -140,7 +142,7 @@ def main():
             mode="gaussian",
             device=device,
         )
-            
+
     seg = seg_probs.argmax(dim=1).squeeze(0).cpu().numpy()
 
     # 4. Save segmentation
@@ -151,7 +153,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
     # #let's do a simple test
     # # Load the model
     # device = get_device()
@@ -183,9 +185,9 @@ if __name__ == "__main__":
     # sw_batch_size = 4
     # # let's create a dummy volume of 128, 128, 128
     # volume = torch.randn(128, 128, 128).to(device)
-    
+
     # print("About to run sliding_window_predict....")
-    
+
     # probs = sliding_window_predict(
     #     model=model,
     #     volume=volume.cpu().numpy(),
@@ -194,16 +196,15 @@ if __name__ == "__main__":
     #     sw_batch_size=sw_batch_size,
     #     device=device,
     # )
-    
-    
+
     # seg = probs.argmax(0).astype(np.uint8)
-    
+
     # print("Segmentation shape:", seg.shape)
-    
+
     # out_img = nib.Nifti1Image(seg, np.eye(4), None)
     # nib.save(out_img, "test_segmentation.nii.gz")
     # print("Segmentation saved to", "test_segmentation.nii.gz")
-    
+
     # #save also the volume
     # out_img = nib.Nifti1Image(volume.cpu().numpy(), np.eye(4), None)
     # nib.save(out_img, "test_volume.nii.gz")
