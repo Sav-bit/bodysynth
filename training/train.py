@@ -135,7 +135,7 @@ if __name__ == "__main__":
     # Set static parameters
     num_epochs = 5000  # How many epochs to train
     batch_size = 1  # How many images to load at once
-    num_batches_per_epoch = 10  # How many batches to load per epoch
+    num_batches_per_epoch = 50  # How many batches to load per epoch
     patch_size = args.patch_size
 
     VALIDATION_INTERVAL = 2  # How often to validate the model
@@ -150,7 +150,7 @@ if __name__ == "__main__":
             "num_batches_per_epoch": num_batches_per_epoch,
             "patch_size": patch_size,
             "validation_interval": VALIDATION_INTERVAL,
-            "learning_rate": LEARNING_RATE,
+            # "learning_rate": LEARNING_RATE,
         },
     )
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     min_delta = 1e-3  # minimum drop in loss to count as “improvement”
     patience_counter = 0
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    scheduler = ReduceLROnPlateau(
         optimizer,
         mode="min",
         factor=0.3,  # LR ← LR × 0.3
@@ -290,7 +290,7 @@ if __name__ == "__main__":
                 wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
                 scheduler.step(avg_val_loss)                     
-                wandb.log({"lr": optimizer.param_groups[0]["lr"]})
+                wandb.log({"lr": optimizer.param_groups[0]["lr"], "epoch": epoch + 1})
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
             # Delete the last‐used validation tensors so they drop out of scope:
