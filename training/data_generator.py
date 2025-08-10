@@ -178,7 +178,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         return segmentation_patch
     
-    def _collapse_triplet_channels(segC : torch.Tensor, k=3) -> torch.Tensor:
+    def _collapse_triplet_channels(self, segC : torch.Tensor, k=3) -> torch.Tensor:
         """
         Collapse channels of a segmentation tensor that has been split into triplets.
         Arguments:
@@ -201,7 +201,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         return out
     
-    def _split_labels_into_three(seg : np.ndarray, background=0, spacing=None, random_state=0):
+    def _split_labels_into_three(self, seg : np.ndarray, background=0, spacing=None, random_state=0):
         """
         Split each non-background label region in `seg` into up to 3 spatial clusters
         using KMeans on voxel coordinates (z, y, x). Returns a new segmentation with
