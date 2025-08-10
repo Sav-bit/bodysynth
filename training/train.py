@@ -224,7 +224,7 @@ if __name__ == "__main__":
     SCHED_PATIENCE = (
         5  # epochs to wait for an improvement before reducing the learning rate
     )
-    EARLYSTOP_PATIENCE = 3 * SCHED_PATIENCE  # epochs to wait for an improvement
+    EARLYSTOP_PATIENCE = 10 * SCHED_PATIENCE  # epochs to wait for an improvement
     min_delta = 1e-3  # minimum drop in loss to count as “improvement”
     patience_counter = 0
 
