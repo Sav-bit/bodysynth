@@ -1,5 +1,6 @@
 from itertools import islice
 from typing import Tuple
+from sklearn.cluster import KMeans
 import torch
 import nibabel as nib
 import brainsynth
@@ -47,7 +48,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 builder="SaverioSynth",
                 out_size=out_size,
                 out_center_str=out_center_str,
-                segmentation_labels="ernie",
+                #segmentation_labels="ernie",
+                segmentation_labels=tuple(range(37)), # 1 [background] + (12 [original classes] * 3 [split into triplets]) = 37
                 device=self.device,
             )
         )
@@ -83,6 +85,9 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
             # This has size  (C, D, H, W)
             segmentation = result["seg"].to(torch.int64)
+
+            # The problem is that now C is 37, so we need to collapse the channels into the 13 Ernie classes
+            segmentation = self._collapse_triplet_channels(segmentation)
 
             if self.padding > 0:
                 sl = slice(self.padding // 2, -self.padding // 2)
@@ -140,8 +145,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
         total_patch_size = [x + self.padding for x in self.patch_size]
         
         #The network need to see some background, so we will randomly flip the isMostBackground flag
-        # with a probability of 0.15
-        do_i_want_background = torch.rand(1).item() < 0.15
+        # with a probability of 0.25
+        do_i_want_background = torch.rand(1).item() < 0.25
 
         while isMostBackground:
             # Get random coordinates for the patch
@@ -164,11 +169,79 @@ class DataGenerator(torch.utils.data.IterableDataset):
             if do_i_want_background:
                 # If we want background, we will stop when the patch is mostly background
                 isMostBackground = not isMostBackground
-            
+
+        # We will split the labels into three
+        segmentation_patch = self._split_labels_into_three(segmentation_patch)
+
         # Convert the patch to a tensor and move it to the device
         segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
 
         return segmentation_patch
+    
+    def _collapse_triplet_channels(segC : torch.Tensor, k=3) -> torch.Tensor:
+        """
+        Collapse channels of a segmentation tensor that has been split into triplets.
+        Arguments:
+            segC: Tensor with shape (C, D, H, W) where C is the number of channels.
+            k: Number of channels per label (default is 3).
+        Returns:
+            A new tensor with shape ((C-1)//k + 1, D, H, W) where the first channel is the background
+            and the rest are collapsed labels.
+        Note: Assumes the first channel is background (0) and the rest are labels.
+        """
+        C = segC.shape[0]
+        n_base = (C - 1) // k
+
+        out = segC.new_zeros((n_base + 1, *segC.shape[1:]))
+        out[0] = segC[0]  # background stays background
+
+        for L in range(1, n_base + 1):
+            start = (L - 1) * k + 1       # e.g. 1,4,7,... for k=3
+            out[L] = segC[start:start + k].sum(dim=0)  # or .amax(dim=0).values
+
+        return out
+    
+    def _split_labels_into_three(seg : np.ndarray, background=0, spacing=None, random_state=0):
+        """
+        Split each non-background label region in `seg` into up to 3 spatial clusters
+        using KMeans on voxel coordinates (z, y, x). Returns a new segmentation with
+        remapped labels:
+        background -> 0
+        L -> (L-1)*3 + {1,2,3}
+        If a region has <3 voxels, it will produce fewer clusters (no warning).
+        """
+        out = seg.copy()
+        uniq = np.unique(seg)
+
+        # scale coordinates by spacing (in mm) if provided, so clustering respects anisotropy
+        spacing = np.asarray(spacing, dtype=np.float32) if spacing is not None else None
+
+        for L in uniq:
+            if L == background:
+                continue
+
+            coords = np.column_stack(np.nonzero(seg == L))  # (N, 3) with [z, y, x]
+            N = coords.shape[0]
+            if N == 0:
+                continue
+
+            k = min(3, N)  # avoid errors if the object is tiny
+
+            X = coords.astype(np.float32)
+            if spacing is not None:
+                X = X * spacing  # cluster in physical space if zooms are anisotropic
+
+            labels = KMeans(n_clusters=k, n_init=10, random_state=random_state).fit_predict(
+                X
+            )
+
+            # New label base: 1.. becomes triples: (L-1)*3 + 1..3
+            base = (int(L) - 1) * 3 + 1
+            for c in range(k):
+                pts = coords[labels == c]
+                out[pts[:, 0], pts[:, 1], pts[:, 2]] = base + c
+
+        return out
 
     def get_affine(self) -> torch.Tensor:
         """
@@ -190,7 +263,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         num_total_pixels = patch.size
         # Check if the patch is mostly background
         return num_non_background / num_total_pixels < threshold
-
+    
     
     def get_class_frequencies(self) -> dict[int, float]:
         """
