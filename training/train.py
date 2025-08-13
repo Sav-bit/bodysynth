@@ -6,11 +6,8 @@ import argparse
 from itertools import islice
 import torch
 from training.data_generator import DataGenerator
-from training.util import build_CE_weights, plot_loss
 from training.validation_dataset import ValidationDataset
 from unet3d import utils
-from unet3d.losses import get_loss_criterion
-from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 import copy

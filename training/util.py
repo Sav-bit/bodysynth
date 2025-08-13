@@ -80,7 +80,6 @@ def plot_loss(
         save_plot (bool): If True, save the plot to "checkpoints/loss.png"; otherwise show it.
     """
 
-
     # Sort epochs so they are plotted in the correct order
     train_epochs = sorted(train_losses.keys())
     train_vals = [train_losses[e] for e in train_epochs]
@@ -106,11 +105,12 @@ def plot_loss(
         plt.show()
 
     plt.close()
-    
+
+
 def build_CE_weights(
     class_frequencies: dict[int, float],
     num_classes: int,
-    mode = "median",
+    mode="median",
 ) -> list[float]:
     """
     Build class weights for CrossEntropyLoss based on class frequencies
@@ -119,7 +119,7 @@ def build_CE_weights(
         num_classes (int): Total number of classes.
         mode (str): The mode to use for calculating weights. Default is "median".
                     Other options are sqrt and inverse.
-        
+
     Returns:
         list[float] of class weights.
     """
@@ -128,16 +128,34 @@ def build_CE_weights(
     for class_id, frequency in class_frequencies.items():
         if class_id < num_classes and frequency > 0:
             weights[class_id] = frequency
-            
+
     if mode == "median":
-        weights = np.median(weights) / weights # median / frequency
+        weights = np.median(weights) / weights  # median / frequency
     elif mode == "sqrt":
         weights = 1.0 / np.sqrt(weights)
-    else: # Inverse
+    else:  # Inverse
         weights = 1.0 / weights
-        
+
     # Normalize weights to sum to 1
     # weights = weights / np.sum(weights)
 
     return weights
 
+
+def build_CE_weights_test(
+    freq: dict[int, float],
+    num_classes: int,
+    alpha: float = 0.5,  # 0.3–0.7 is sane
+    clamp: tuple[float, float] = (0.33, 3.0),
+    eps: float = 1e-8,
+) -> np.ndarray:
+    p = np.ones(num_classes, dtype=np.float32)
+    for c, f in freq.items():
+        if 0 <= c < num_classes and f > 0:
+            p[c] = f
+
+    # inverse-frequency with temperature alpha
+    w = (1.0 / np.maximum(p, eps)) ** alpha
+    w = w / w.mean()  # keep the loss scale stable
+    w = np.clip(w, *clamp)  # avoid extremes (tune if needed)
+    return w

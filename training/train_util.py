@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from training.data_generator import DataGenerator
-from training.util import build_CE_weights, plot_loss
+from training.util import build_CE_weights, build_CE_weights_test, plot_loss
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
@@ -63,8 +63,8 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
 
     if data_gen is not None:
         freq = data_gen.get_class_frequencies()
-        ce_weights = build_CE_weights(
-            class_frequencies=freq,
+        ce_weights = build_CE_weights_test(
+            freq=freq,
             num_classes=data_gen.get_num_classes(),
         )
 
@@ -102,7 +102,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
         labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
         ce_term = cross_entropy_loss(prediction, labels.long())
         
-        alpha = 1
+        alpha = 0.3
         
         if model is not None:
             
