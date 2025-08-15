@@ -93,7 +93,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
     Merges the two loss functions into one.
     """
 
-    def merged_loss(prediction, segs_onehot):
+    def merged_loss(prediction, segs_onehot, step = None):
         # segs_onehot: LongTensor or FloatTensor, shape [N, C, D, H, W]
         # 1) Dice wants [N,C,…] float probabilities / one-hot
         dice_term = dice_loss(prediction, segs_onehot)
@@ -102,8 +102,13 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
         labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
         ce_term = cross_entropy_loss(prediction, labels.long())
         
-        alpha = 0.3
-        
+        if step is None:
+            alpha = 0.4
+        elif step < 2000:
+            alpha = 0.8
+        else:
+            alpha = 0.4
+
         if model is not None:
             
             if model.training:

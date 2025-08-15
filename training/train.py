@@ -136,7 +136,7 @@ if __name__ == "__main__":
     patch_size = args.patch_size
 
     VALIDATION_INTERVAL = 2  # How often to validate the model
-    LEARNING_RATE = 3e-4  # Learning rate for the optimizer
+    LEARNING_RATE = 1e-4  # Learning rate for the optimizer
 
     run = wandb.init(
         project="bodysynth",
@@ -225,17 +225,19 @@ if __name__ == "__main__":
     min_delta = 1e-3  # minimum drop in loss to count as “improvement”
     patience_counter = 0
 
-    scheduler = ReduceLROnPlateau(
-        optimizer,
-        mode="min",
-        factor=0.3,  # LR ← LR × 0.3
-        patience=SCHED_PATIENCE,
-        threshold=min_delta,  # same definition of “improve” as early-stop
-        threshold_mode="rel",
-        cooldown=1,
-        min_lr=1e-5,
-        verbose=True,
-    )
+    # scheduler = ReduceLROnPlateau(
+    #     optimizer,
+    #     mode="min",
+    #     factor=0.3,  # LR ← LR × 0.3
+    #     patience=SCHED_PATIENCE,
+    #     threshold=min_delta,  # same definition of “improve” as early-stop
+    #     threshold_mode="rel",
+    #     cooldown=1,
+    #     min_lr=1e-5,
+    #     verbose=True,
+    # )
+    
+    global_update = 0
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
@@ -245,7 +247,7 @@ if __name__ == "__main__":
         batch_losses = []
 
         # The data generator is infinite, so we need to limit the number of batches
-        for images, segs in islice(data_gen, num_batches_per_epoch):
+        for batch_idx, (images, segs) in enumerate(islice(data_gen, num_batches_per_epoch)):
 
             optimizer.zero_grad()
 
@@ -256,10 +258,11 @@ if __name__ == "__main__":
             prediction = model(images)
 
             # Compute the loss
-            loss = criterion(prediction, segs)
+            loss = criterion(prediction, segs, global_update)
             loss.backward()
 
             optimizer.step()
+            global_update += 1
             curr_loss = loss.item()
             batch_losses.append(curr_loss)
 
@@ -269,8 +272,6 @@ if __name__ == "__main__":
 
         print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
         wandb.log({"epoch": epoch + 1, "train/loss": epoch_loss})
-
-        # scheduler.step()
 
         if val_loader and (epoch + 1) % VALIDATION_INTERVAL == 0:
             model.eval()
@@ -286,7 +287,7 @@ if __name__ == "__main__":
                 print(f"Validation Loss at epoch {epoch + 1}: {avg_val_loss:.4f}")
                 wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
-                scheduler.step(avg_val_loss)                     
+                # scheduler.step(avg_val_loss)                     
                 wandb.log({"lr": optimizer.param_groups[0]["lr"], "epoch": epoch + 1})
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
