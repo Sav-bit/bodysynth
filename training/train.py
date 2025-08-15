@@ -111,7 +111,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--patch_size", type=int, nargs=3, default=[170, 170, 170])
 
-    parser.add_argument("--small_description", type=str, optional=True, help="A small description of the run")
+    parser.add_argument("--small_description", type=str, default='', help="A small description of the run")
 
     args = parser.parse_args()
 
