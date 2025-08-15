@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -67,11 +68,16 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
             freq=freq,
             num_classes=data_gen.get_num_classes(),
         )
+        
+        dice_weights = np.ones(data_gen.get_num_classes())
+        dice_weights[0] = 0.0  # Ignore background class for Dice loss
+
 
     dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
             "normalization": "softmax",
+            "weight": dice_weights if data_gen else None,
         }
     }
 
