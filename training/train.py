@@ -111,12 +111,15 @@ if __name__ == "__main__":
 
     parser.add_argument("--patch_size", type=int, nargs=3, default=[170, 170, 170])
 
+    parser.add_argument("--small_description", type=str, optional=True, help="A small description of the run")
+
     args = parser.parse_args()
 
     seg_path = args.seg_path
     continue_training = args.continue_training
     val_path = args.validation_path
     run_name = args.run_name
+    description = args.small_description
 
     # -----------------------------
     # End of the arguments
@@ -141,6 +144,7 @@ if __name__ == "__main__":
     run = wandb.init(
         project="bodysynth",
         name=run_name if run_name else "UNet3D Training w BodySynth",
+        notes=description,
         config={
             "num_epochs": num_epochs,
             "batch_size": batch_size,
@@ -238,18 +242,18 @@ if __name__ == "__main__":
     # )
     
     global_update = 0
+    ACCUM = 8
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
 
         model.train()
+        optimizer.zero_grad()
 
         batch_losses = []
 
         # The data generator is infinite, so we need to limit the number of batches
-        for batch_idx, (images, segs) in enumerate(islice(data_gen, num_batches_per_epoch)):
-
-            optimizer.zero_grad()
+        for batch_idx, (images, segs) in enumerate(islice(data_gen, num_batches_per_epoch), 1):
 
             # Normalize the images performing zscore normalization
             images = (images - images.mean()) / (images.std() + 1e-6)
@@ -258,13 +262,24 @@ if __name__ == "__main__":
             prediction = model(images)
 
             # Compute the loss
-            loss = criterion(prediction, segs, global_update)
+            loss = criterion(prediction, segs, global_update) / ACCUM
             loss.backward()
-
-            optimizer.step()
-            global_update += 1
-            curr_loss = loss.item()
+            curr_loss = loss.item() * ACCUM
             batch_losses.append(curr_loss)
+
+            if batch_idx % ACCUM == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                optimizer.zero_grad()
+                global_update += 1
+
+        
+        # flush leftover microbatches if epoch isn't a multiple of ACCUM
+        if (batch_idx % ACCUM) != 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            optimizer.zero_grad()
+            global_update += 1
 
         # Compute the average loss for the epoch
         epoch_loss = sum(batch_losses) / len(batch_losses)

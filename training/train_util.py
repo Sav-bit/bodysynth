@@ -8,6 +8,7 @@ from unet3d import utils
 from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 import wandb
+from monai.losses import DiceLoss, FocalLoss
 
 
 def get_device() -> torch.device:
@@ -23,8 +24,8 @@ def get_device() -> torch.device:
         return torch.device("cuda")
     else:
         return torch.device("cpu")
-    
-    
+
+
 def get_model(data_gen: DataLoader) -> AbstractUNet:
     """
     Returns the UNet3D model.
@@ -50,11 +51,12 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
 
     return model
 
+
 def get_losses(data_gen: DataGenerator = None) -> tuple:
     """
     Returns the loss criterion (CrossEntropyLoss and DiceLoss) for training.
     For readability, the loss is hardcoded here.
-    
+
     Args:
         data_gen (DataGenerator, optional): Data generator to compute class frequencies
         for CrossEntropyLoss. If None, no weights are applied.
@@ -62,44 +64,60 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
         tuple: A tuple containing the DiceLoss and CrossEntropyLoss criteria.
     """
 
+    ce_weights = None
+
     if data_gen is not None:
         freq = data_gen.get_class_frequencies()
         ce_weights = build_CE_weights_test(
             freq=freq,
             num_classes=data_gen.get_num_classes(),
         )
-        
-        dice_weights = np.ones(data_gen.get_num_classes())
-        dice_weights[0] = 0.0  # Ignore background class for Dice loss
+        ce_weights = torch.tensor(ce_weights, dtype=torch.float32, device=data_gen.device)
 
+    # dice_loss_config = {
+    #     "loss": {
+    #         "name": "DiceLoss",
+    #         "normalization": "softmax",
+    #         "weight": dice_weights if data_gen else None,
+    #     }
+    # }
 
-    dice_loss_config = {
-        "loss": {
-            "name": "DiceLoss",
-            "normalization": "softmax",
-            "weight": dice_weights if data_gen else None,
-        }
-    }
+    # dice_loss = get_loss_criterion(dice_loss_config)
 
-    dice_loss = get_loss_criterion(dice_loss_config)
+    # cross_entropy_loss = get_loss_criterion(
+    #     {
+    #         "loss": {
+    #             "name": "CrossEntropyLoss",
+    #             "weight": ce_weights if data_gen else None,
+    #         }
+    #     }
+    # )
 
-    cross_entropy_loss = get_loss_criterion(
-        {
-            "loss": {
-                "name": "CrossEntropyLoss",
-                "weight": ce_weights if data_gen else None,
-            }
-        }
+    dice_loss = DiceLoss(
+        softmax=True,
+        to_onehot_y=False,  # your target is already one-hot
+        include_background=False,
+        smooth_nr=1e-5,
+        smooth_dr=1e-5,
     )
 
-    return dice_loss, cross_entropy_loss
+    focal_ce = FocalLoss(
+        to_onehot_y=True,  # we'll pass label indices; MONAI will one-hot them
+        include_background=True,  # background still participates in CE
+        gamma=2.0,
+        weight=ce_weights,  # your clamped mean=1 weights
+        reduction="mean",
+    )
+
+    return dice_loss, focal_ce
+
 
 def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
     """
     Merges the two loss functions into one.
     """
 
-    def merged_loss(prediction, segs_onehot, step = None):
+    def merged_loss(prediction, segs_onehot, step=None):
         # segs_onehot: LongTensor or FloatTensor, shape [N, C, D, H, W]
         # 1) Dice wants [N,C,…] float probabilities / one-hot
         dice_term = dice_loss(prediction, segs_onehot)
@@ -107,7 +125,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
         # 2) CE wants [N, D, H, W] LongTensor of class indices
         labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
         ce_term = cross_entropy_loss(prediction, labels.long())
-        
+
         if step is None:
             alpha = 0.4
         elif step < 2000:
@@ -116,7 +134,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
             alpha = 0.4
 
         if model is not None:
-            
+
             if model.training:
                 wandb.log(
                     {
@@ -135,6 +153,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
         return dice_term + (alpha * ce_term)
 
     return merged_loss
+
 
 def save_checkpoint_state(
     model,
@@ -158,4 +177,4 @@ def save_checkpoint_state(
         "learning_rate": learning_rate,
     }
     utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
-    plot_loss(train_losses, val_lossess, save_plot=True, run_name=run_name)
+    # plot_loss(train_losses, val_lossess, save_plot=True, run_name=run_name)
