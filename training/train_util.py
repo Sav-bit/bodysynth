@@ -102,7 +102,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
     )
 
     focal_ce = FocalLoss(
-        to_onehot_y=True,  # we'll pass label indices; MONAI will one-hot them
+        to_onehot_y=False,  # we'll pass label indices; MONAI will one-hot them
         include_background=True,  # background still participates in CE
         gamma=2.0,
         weight=ce_weights,  # your clamped mean=1 weights
@@ -122,9 +122,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
         # 1) Dice wants [N,C,…] float probabilities / one-hot
         dice_term = dice_loss(prediction, segs_onehot)
 
-        # 2) CE wants [N, D, H, W] LongTensor of class indices
-        labels = segs_onehot.argmax(dim=1)  # → [N, D, H, W]
-        ce_term = cross_entropy_loss(prediction, labels.long())
+        ce_term = cross_entropy_loss(prediction, segs_onehot)
 
         if step is None:
             alpha = 0.4
