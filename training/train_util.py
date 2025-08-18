@@ -85,14 +85,14 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
 
     # dice_loss = get_loss_criterion(dice_loss_config)
 
-    # cross_entropy_loss = get_loss_criterion(
-    #     {
-    #         "loss": {
-    #             "name": "CrossEntropyLoss",
-    #             "weight": ce_weights if data_gen else None,
-    #         }
-    #     }
-    # )
+    cross_entropy_loss = get_loss_criterion(
+        {
+            "loss": {
+                "name": "CrossEntropyLoss",
+                "weight": ce_weights if data_gen else None,
+            }
+        }
+    )
 
     dice_loss = DiceLoss(
         softmax=True,
@@ -102,15 +102,15 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
         smooth_dr=1e-5,
     )
 
-    focal_ce = FocalLoss(
-        to_onehot_y=True,  # your target is already one-hot
-        include_background=True,  # background still participates in CE
-        gamma=2.0,
-        weight=ce_weights,  # your clamped mean=1 weights
-        reduction="mean",
-    )
+    # focal_ce = FocalLoss(
+    #     to_onehot_y=True,  # your target is already one-hot
+    #     include_background=True,  # background still participates in CE
+    #     gamma=2.0,
+    #     weight=ce_weights,  # your clamped mean=1 weights
+    #     reduction="mean",
+    # )
 
-    return dice_loss, focal_ce
+    return dice_loss, cross_entropy_loss
 
 
 def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alpha_start=0.8, alpha_end=0.3, decay_steps=2000):
