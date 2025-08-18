@@ -9,6 +9,8 @@ from unet3d.losses import get_loss_criterion
 from unet3d.model import AbstractUNet, UNet3D
 from torch.utils.data import DataLoader
 import numpy as np
+from monai.transforms import Compose, RandCropByLabelClassesd, ToTensord, EnsureChannelFirstd
+
 
 """
 Remember in this file:
@@ -43,16 +45,40 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         out_size = [x + self.padding for x in self.patch_size]
 
+        max_number_classes = ((self.get_num_classes() - 1) * 3) + 1
+
         self.synth = brainsynth.Synthesizer(
             brainsynth.config.SynthesizerConfig(
                 builder="SaverioSynth",
                 out_size=out_size,
                 out_center_str=out_center_str,
                 #segmentation_labels="ernie",
-                segmentation_labels=tuple(range(37)), # 1 [background] + (12 [original classes] * 3 [split into triplets]) = 37
+                segmentation_labels=tuple(range(max_number_classes)), # 1 [background] + (9 [original classes] * 3 [split into triplets]) = 28
                 device=self.device,
             )
         )
+        
+        freq = self.get_class_frequencies()              # {class: fraction}
+        ratios = np.ones(self.get_num_classes(), dtype=np.float32)
+        ratios[0] = 0.2                                   # small chance to pick background
+        for c in range(1, self.get_num_classes()):
+            f = float(freq.get(c, 0.0))
+            ratios[c] = 1.0 / np.sqrt(f + 1e-8)          # rare classes get higher ratio
+        ratios = (ratios / ratios.sum()).tolist()
+        
+        #implementation of the class_crop
+        self.class_crop = Compose([
+            # EnsureChannelFirstd(keys=["seg"]),
+            RandCropByLabelClassesd(
+                keys=["seg"],                            # what to crop
+                label_key="seg",                         # use seg to choose centers
+                spatial_size=out_size,                   # crop size BEFORE your padding-trim
+                ratios=ratios,                           # sampling preference per class id
+                num_classes=self.get_num_classes(),            # total classes in seg
+                num_samples=1                            # return a single crop (dict, not list)
+            ),
+            ToTensord(keys=["seg"])                    
+        ])
 
     def load_data(self) -> Tuple[np.ndarray, np.ndarray]:
         """ Loads the segmentation data from the NIfTI file.
@@ -74,9 +100,22 @@ class DataGenerator(torch.utils.data.IterableDataset):
         Returns an iterator that yields batches of data.
         """
         while True:
+            
+            #get a 50% probability
+            if torch.rand(1).item() < 0.5:
+                random_patch = self.get_random_patch()
+            else:
+                random_patch = self._get_class_aware_patch()
+
+            # We will split the labels into three
+            random_patch = self._split_labels_into_three(random_patch)
+            
+            # Convert the patch to a tensor and move it to the device
+            segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
+
             # Get a random patch from the original segmentation
             # Then we will use the synthesizer to generate a new image from that patch
-            to_synth = dict(segmentation=self.get_random_patch())
+            to_synth = dict(segmentation=random_patch)
 
             result = self.synth(to_synth, unpack=False)
 
@@ -131,7 +170,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         return int(self.get_original_segmentation().max() + 1)
 
-    def get_random_patch(self) -> torch.Tensor:
+    def get_random_patch(self) -> np.ndarray:
 
         seg = self.get_original_segmentation()
 
@@ -170,14 +209,19 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 # If we want background, we will stop when the patch is mostly background
                 isMostBackground = not isMostBackground
 
-        # We will split the labels into three
-        segmentation_patch = self._split_labels_into_three(segmentation_patch)
-
-        # Convert the patch to a tensor and move it to the device
-        segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
-
         return segmentation_patch
     
+    
+    def _get_class_aware_patch(self) -> np.ndarray:
+
+        temp_seg = np.expand_dims(self.get_original_segmentation(), axis=0)
+
+        sample = self.class_crop({"seg": temp_seg})
+        
+        seg_patch = sample[0]["seg"]
+    
+        return seg_patch.numpy().squeeze(0)
+
     def _collapse_triplet_channels(self, segC : torch.Tensor, k=3) -> torch.Tensor:
         """
         Collapse channels of a segmentation tensor that has been split into triplets.
@@ -263,8 +307,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         num_total_pixels = patch.size
         # Check if the patch is mostly background
         return num_non_background / num_total_pixels < threshold
-    
-    
+      
     def get_class_frequencies(self) -> dict[int, float]:
         """
         Returns a dictiornay with the class frequencies in the original segmentation.

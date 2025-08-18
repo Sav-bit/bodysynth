@@ -102,7 +102,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
     )
 
     focal_ce = FocalLoss(
-        to_onehot_y=False,  # we'll pass label indices; MONAI will one-hot them
+        to_onehot_y=False,
         include_background=True,  # background still participates in CE
         gamma=2.0,
         weight=ce_weights,  # your clamped mean=1 weights
