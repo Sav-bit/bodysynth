@@ -122,7 +122,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alph
         # segs_onehot: [N,C,D,H,W], float32 (may already be one-hot)
         # Sanitize to strictly one-hot:
         segs_bin = (segs_onehot > 0).float()
-        labels   = segs_bin.argmax(dim=1, keepdim=True).long()              # [N,1,D,H,W]
+        labels   = segs_bin.argmax(dim=1, keepdim=True).long().squeeze(1)              # [N,1,D,H,W]
         segs_1hot = torch.zeros_like(segs_bin).scatter_(1, labels, 1.0)     # [N,C,D,H,W]
 
         # Compute losses
