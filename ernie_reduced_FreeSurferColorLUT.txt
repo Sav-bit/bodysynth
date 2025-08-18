@@ -1,0 +1,10 @@
+#No.	  Label Name:			   R   G   B   A
+1	  White-Matter			   230 230 230 255  
+2	  CSF			    	   104 163 255 255 
+3	  Bone			   	   255 239 179 255 
+4	  Scalp			     	   255 166 133 255 
+5 	  Blood				   0 65 142 255 
+6	  Muscle     	   		   194 112 112 255
+7   	  Cartilage           		   85 170 0 255
+8  	  Fat                    	   193 161 161 255
+9	  Air_conducts			   0 200 180 255 
