@@ -30,7 +30,7 @@ class ValidationDataset(torch.utils.data.Dataset):
         self,
         img: str | Path,
         seg: str | Path,
-        num_classes: int = 13,
+        num_classes: int = 10,
         patch_size: Sequence[int] = (128, 128, 128),
         stride: Sequence[int] | None = None,
         device: str = "cpu",

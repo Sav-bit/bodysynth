@@ -224,27 +224,22 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
     def _collapse_triplet_channels(self, segC : torch.Tensor, k=3) -> torch.Tensor:
         """
-        Collapse channels of a segmentation tensor that has been split into triplets.
-        Arguments:
-            segC: Tensor with shape (C, D, H, W) where C is the number of channels.
-            k: Number of channels per label (default is 3).
-        Returns:
-            A new tensor with shape ((C-1)//k + 1, D, H, W) where the first channel is the background
-            and the rest are collapsed labels.
-        Note: Assumes the first channel is background (0) and the rest are labels.
+        segC: [C*, D, H, W] (float/binary). Returns strict one-hot over base classes: [B, D, H, W].
         """
-        C = segC.shape[0]
-        n_base = (C - 1) // k
+        Cstar = segC.shape[0]
+        assert (Cstar - 1) % k == 0, "Channels don't look like triplets"
+        B = 1 + (Cstar - 1) // k
 
-        out = segC.new_zeros((n_base + 1, *segC.shape[1:]))
-        out[0] = segC[0]  # background stays background
+        idx = segC.argmax(dim=0)  # [D,H,W], 0..C*-1 (which triplet channel wins per voxel)
 
-        for L in range(1, n_base + 1):
-            start = (L - 1) * k + 1       # e.g. 1,4,7,... for k=3
-            out[L] = segC[start:start + k].sum(dim=0)  # or .amax(dim=0).values
+        base = torch.zeros_like(idx)
+        fg = idx > 0
+        base[fg] = 1 + ( (idx[fg] - 1) // k )  # map triplet index -> base class 1..B-1
 
+        out = segC.new_zeros((B, *segC.shape[1:]), dtype=torch.float32)
+        out.scatter_(0, base.unsqueeze(0), 1.0)  # one-hot channels first
         return out
-    
+
     def _split_labels_into_three(self, seg : np.ndarray, background=0, spacing=None, random_state=0):
         """
         Split each non-background label region in `seg` into up to 3 spatial clusters

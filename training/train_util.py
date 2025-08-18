@@ -103,7 +103,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
     )
 
     focal_ce = FocalLoss(
-        to_onehot_y=False,
+        to_onehot_y=True,  # your target is already one-hot
         include_background=True,  # background still participates in CE
         gamma=2.0,
         weight=ce_weights,  # your clamped mean=1 weights
@@ -113,43 +113,33 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
     return dice_loss, focal_ce
 
 
-def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
+def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alpha_start=0.8, alpha_end=0.3, decay_steps=2000):
     """
     Merges the two loss functions into one.
     """
 
     def merged_loss(prediction, segs_onehot, step=None):
-        # segs_onehot: LongTensor or FloatTensor, shape [N, C, D, H, W]
-        # 1) Dice wants [N,C,…] float probabilities / one-hot
-        dice_term = dice_loss(prediction, segs_onehot)
+        # segs_onehot: [N,C,D,H,W], float32 (may already be one-hot)
+        # Sanitize to strictly one-hot:
+        segs_bin = (segs_onehot > 0).float()
+        labels   = segs_bin.argmax(dim=1, keepdim=True).long()              # [N,1,D,H,W]
+        segs_1hot = torch.zeros_like(segs_bin).scatter_(1, labels, 1.0)     # [N,C,D,H,W]
 
-        ce_term = cross_entropy_loss(prediction, segs_onehot)
+        # Compute losses
+        dice_term = dice_loss(prediction, segs_1hot)            # excludes background
+        ce_term   = cross_entropy_loss(prediction, labels)                # indices + to_onehot_y=True
 
-        if step is None:
-            alpha = 0.4
-        elif step < 2000:
-            alpha = 0.8
-        else:
-            alpha = 0.4
-            
-        alpha = 1
+        # CE weight schedule (optimizer-step based)
+        s = 0 if step is None else step
+        t = min(s / decay_steps, 1.0)
+        alpha = alpha_start + (alpha_end - alpha_start) * t
 
+        # Optional logging
         if model is not None:
-
-            if model.training:
-                wandb.log(
-                    {
-                        "train/dice_loss": dice_term.item(),
-                        "train/cross_entropy_loss": ce_term.item(),
-                    }
-                )
-            else:
-                wandb.log(
-                    {
-                        "validation/dice_loss": dice_term.item(),
-                        "validation/cross_entropy_loss": ce_term.item(),
-                    }
-                )
+            key = "train" if model.training else "validation"
+            wandb.log({f"{key}/dice_loss": float(dice_term.item()),
+                       f"{key}/focal_ce":   float(ce_term.item()),
+                       f"{key}/alpha_ce":   float(alpha)})
 
         return dice_term + (alpha * ce_term)
 
