@@ -111,11 +111,11 @@ class DataGenerator(torch.utils.data.IterableDataset):
             random_patch = self._split_labels_into_three(random_patch)
             
             # Convert the patch to a tensor and move it to the device
-            segmentation_patch = torch.tensor(segmentation_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
+            segmentation_patch = torch.tensor(random_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
 
             # Get a random patch from the original segmentation
             # Then we will use the synthesizer to generate a new image from that patch
-            to_synth = dict(segmentation=random_patch)
+            to_synth = dict(segmentation=segmentation_patch)
 
             result = self.synth(to_synth, unpack=False)
 

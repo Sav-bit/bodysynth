@@ -130,6 +130,8 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None):
             alpha = 0.8
         else:
             alpha = 0.4
+            
+        alpha = 1
 
         if model is not None:
 
