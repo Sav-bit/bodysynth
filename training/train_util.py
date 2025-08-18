@@ -73,6 +73,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
             num_classes=data_gen.get_num_classes(),
         )
         ce_weights = torch.tensor(ce_weights, dtype=torch.float32, device=data_gen.device)
+        console.log(f"CrossEntropyLoss weights: {ce_weights}")
 
     # dice_loss_config = {
     #     "loss": {
