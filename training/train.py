@@ -242,7 +242,7 @@ if __name__ == "__main__":
     # )
     
     global_update = 0
-    ACCUM = 8
+    # ACCUM = 8
 
     # Training loop
     for epoch in range(last_epoch, num_epochs):
@@ -262,24 +262,24 @@ if __name__ == "__main__":
             prediction = model(images)
 
             # Compute the loss
-            loss = criterion(prediction, segs, global_update) / ACCUM
+            loss = criterion(prediction, segs, global_update)
             loss.backward()
-            curr_loss = loss.item() * ACCUM
+            curr_loss = loss.item()
             batch_losses.append(curr_loss)
 
-            if batch_idx % ACCUM == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                optimizer.zero_grad()
-                global_update += 1
-
-        
-        # flush leftover microbatches if epoch isn't a multiple of ACCUM
-        if (batch_idx % ACCUM) != 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            # if batch_idx % ACCUM == 0:
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             optimizer.zero_grad()
             global_update += 1
+
+        
+        # flush leftover microbatches if epoch isn't a multiple of ACCUM
+        # if (batch_idx % ACCUM) != 0:
+        #     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        #     optimizer.step()
+        #     optimizer.zero_grad()
+        #     global_update += 1
 
         # Compute the average loss for the epoch
         epoch_loss = sum(batch_losses) / len(batch_losses)

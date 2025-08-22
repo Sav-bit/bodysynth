@@ -130,10 +130,10 @@ class ValidationDataset(torch.utils.data.Dataset):
 
         iz, iy, ix = slice(z, z + pz), slice(y, y + py), slice(x, x + px)
 
-        # (1, D, H, W)
+        # (1, D, H, W) label map
         img_patch = self.img[iz, iy, ix].unsqueeze(0)
 
-        # one-hot ➜ (C, D, H, W) float32
+        # label map -> one-hot (C, D, H, W) float32
         seg_patch = self.seg[iz, iy, ix]
         seg_patch = F.one_hot(seg_patch, self.num_classes).permute(3, 0, 1, 2).float()
         
