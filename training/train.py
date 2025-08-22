@@ -74,7 +74,7 @@ def get_validation_data_loader(
         dataset,
         batch_size=batch_size,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=True,
     )
 
 
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 5000  # How many epochs to train
-    batch_size = 1  # How many images to load at once
+    batch_size = 2  # How many images to load at once
     num_batches_per_epoch = 50  # How many batches to load per epoch
     patch_size = args.patch_size
 
@@ -159,8 +159,8 @@ if __name__ == "__main__":
     data_gen = get_data_generator(
         seg_path=seg_path,
         batch_size=batch_size,
-        device=device,
-        num_workers=0,
+        device=torch.device("cpu"),
+        num_workers=8,
         patch_size=patch_size,
     )
 
@@ -256,8 +256,12 @@ if __name__ == "__main__":
         for batch_idx, (images, segs) in enumerate(islice(data_gen, num_batches_per_epoch), 1):
 
             # Normalize the images performing zscore normalization
-            images = (images - images.mean()) / (images.std() + 1e-6)
+            
+            images = images.to(device, non_blocking=True)
+            segs = segs.to(device, non_blocking=True)
 
+            images = (images - images.mean()) / (images.std() + 1e-6)
+            
             # Forward pass
             prediction = model(images)
 
