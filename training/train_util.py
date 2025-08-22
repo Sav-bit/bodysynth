@@ -141,7 +141,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alph
         if model is not None:
             key = "train" if model.training else "validation"
             wandb.log({f"{key}/dice_loss": float(dice_term.item()),
-                       f"{key}/focal_ce":   float(ce_term.item()),
+                       f"{key}/cross_entropy_loss":   float(ce_term.item()),
                        f"{key}/alpha_ce":   float(alpha)})
 
         return dice_term + (alpha * ce_term)
