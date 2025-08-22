@@ -66,6 +66,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
             ratios[c] = 1.0 / np.sqrt(f + 1e-8)          # rare classes get higher ratio
         ratios = (ratios / ratios.sum()).tolist()
         
+        print(f"Class ratios: {ratios}")
+        
         #implementation of the class_crop
         self.class_crop = Compose([
             # EnsureChannelFirstd(keys=["seg"]),
@@ -102,10 +104,10 @@ class DataGenerator(torch.utils.data.IterableDataset):
         while True:
             
             #get a 50% probability
-            if torch.rand(1).item() < 0.5:
-                random_patch = self.get_random_patch()
-            else:
-                random_patch = self._get_class_aware_patch()
+            # if torch.rand(1).item() < 0.5:
+            #     random_patch = self.get_random_patch()
+            # else:
+            random_patch = self._get_class_aware_patch()
 
             # We will split the labels into three
             random_patch = self._split_labels_into_three(random_patch)

@@ -65,6 +65,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
     """
 
     ce_weights = None
+    dice_weights = None
 
     if data_gen is not None:
         freq = data_gen.get_class_frequencies()
@@ -74,16 +75,18 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
         )
         ce_weights = torch.tensor(ce_weights, dtype=torch.float32, device=data_gen.device)
         print(f"CrossEntropyLoss weights: {ce_weights}")
+        dice_weights = np.ones(data_gen.get_num_classes(), dtype=np.float32)
+        dice_weights[0] = 0.0  # background class weight is zero
 
-    # dice_loss_config = {
-    #     "loss": {
-    #         "name": "DiceLoss",
-    #         "normalization": "softmax",
-    #         "weight": dice_weights if data_gen else None,
-    #     }
-    # }
+    dice_loss_config = {
+        "loss": {
+            "name": "DiceLoss",
+            "normalization": "softmax",
+            "weight": dice_weights,
+        }
+    }
 
-    # dice_loss = get_loss_criterion(dice_loss_config)
+    dice_loss = get_loss_criterion(dice_loss_config)
 
     cross_entropy_loss = get_loss_criterion(
         {
@@ -94,13 +97,13 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
         }
     )
 
-    dice_loss = DiceLoss(
-        softmax=True,
-        to_onehot_y=False,  # your target is already one-hot
-        include_background=False,
-        smooth_nr=1e-5,
-        smooth_dr=1e-5,
-    )
+    # dice_loss = DiceLoss(
+    #     softmax=True,
+    #     to_onehot_y=False,  # your target is already one-hot
+    #     include_background=False,
+    #     smooth_nr=1e-5,
+    #     smooth_dr=1e-5,
+    # )
 
     # focal_ce = FocalLoss(
     #     to_onehot_y=True,  # your target is already one-hot
