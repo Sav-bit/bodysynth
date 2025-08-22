@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 5000  # How many epochs to train
-    batch_size = 2  # How many images to load at once
+    batch_size = 1  # How many images to load at once
     num_batches_per_epoch = 50  # How many batches to load per epoch
     patch_size = args.patch_size
 
