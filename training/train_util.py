@@ -6,7 +6,7 @@ from training.data_generator import DataGenerator
 from training.util import build_CE_weights, build_CE_weights_test, plot_loss
 from unet3d import utils
 from unet3d.losses import get_loss_criterion
-from unet3d.model import AbstractUNet, UNet3D
+from unet3d.model import AbstractUNet, ResidualUNet3D, UNet3D
 import wandb
 from monai.losses import DiceLoss, FocalLoss
 
@@ -31,7 +31,7 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
     Returns the UNet3D model.
     For readability, the network architecture is hardcoded here.
     """
-    model = UNet3D(
+    model = ResidualUNet3D(
         in_channels=1,
         out_channels=data_gen.dataset.get_num_classes(),
         f_maps=(32, 64, 128, 256, 512),
@@ -45,7 +45,7 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
         upsample="deconv",
         num_levels=5,
         dropout_prob=0.0,
-        is_segmentation=True,
+        is_segmentation=False,
         is3d=True,
     )
 
@@ -73,7 +73,7 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
             freq=freq,
             num_classes=data_gen.get_num_classes(),
         )
-        ce_weights = torch.tensor(ce_weights, dtype=torch.float32, device=data_gen.device)
+        # ce_weights = torch.tensor(ce_weights, dtype=torch.float32, device=data_gen.device)
         print(f"CrossEntropyLoss weights: {ce_weights}")
         dice_weights = np.ones(data_gen.get_num_classes(), dtype=np.float32)
         dice_weights[0] = 0.0  # background class weight is zero
