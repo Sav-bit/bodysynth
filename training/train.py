@@ -113,6 +113,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--small_description", type=str, default='', help="A small description of the run")
 
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for training")
+
     args = parser.parse_args()
 
     seg_path = args.seg_path
@@ -120,6 +122,8 @@ if __name__ == "__main__":
     val_path = args.validation_path
     run_name = args.run_name
     description = args.small_description
+    patch_size = args.patch_size
+    batch_size = args.batch_size  # How many images to load at once
 
     # -----------------------------
     # End of the arguments
@@ -134,9 +138,7 @@ if __name__ == "__main__":
 
     # Set static parameters
     num_epochs = 5000  # How many epochs to train
-    batch_size = 2  # How many images to load at once
     num_batches_per_epoch = 50  # How many batches to load per epoch
-    patch_size = args.patch_size
 
     VALIDATION_INTERVAL = 2  # How often to validate the model
     LEARNING_RATE = 1e-4  # Learning rate for the optimizer
@@ -159,8 +161,8 @@ if __name__ == "__main__":
     data_gen = get_data_generator(
         seg_path=seg_path,
         batch_size=batch_size,
-        device=torch.device("cpu"),
-        num_workers=8,
+        device=device,
+        num_workers=0,
         patch_size=patch_size,
     )
 
