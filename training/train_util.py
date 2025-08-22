@@ -172,3 +172,10 @@ def save_checkpoint_state(
     }
     utils.save_checkpoint(state, is_best, checkpoint_dir, title=run_name)
     # plot_loss(train_losses, val_lossess, save_plot=True, run_name=run_name)
+
+
+def zscore(x : torch.Tensor, eps=1e-6):
+    # x: [N, C, D, H, W]
+    m = x.mean(dim=(2,3,4), keepdim=True)
+    s = x.std(dim=(2,3,4), keepdim=True).clamp_min(eps)
+    return (x - m) / s

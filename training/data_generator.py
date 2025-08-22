@@ -58,17 +58,12 @@ class DataGenerator(torch.utils.data.IterableDataset):
             )
         )
         
-        freq = self.get_class_frequencies()              # {class: fraction}
-        ratios = np.ones(self.get_num_classes(), dtype=np.float32)
-        ratios[0] = 0.2                                   # small chance to pick background
-        for c in range(1, self.get_num_classes()):
-            f = float(freq.get(c, 0.0))
-            ratios[c] = 1.0 / np.sqrt(f + 1e-8)          # rare classes get higher ratio
-        ratios = (ratios / ratios.sum()).tolist()
+
+        ratios = self.build_fg_only_ratios(self.original_data, self.get_num_classes())
         
-        print(f"Class ratios: {ratios}")
-        
-        #implementation of the class_crop
+        print(f"Ratios: {ratios}")
+
+        # implementation of the class_crop
         self.class_crop = Compose([
             # EnsureChannelFirstd(keys=["seg"]),
             RandCropByLabelClassesd(
@@ -103,11 +98,11 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         while True:
             
-            #get a 50% probability
-            # if torch.rand(1).item() < 0.5:
-            #     random_patch = self.get_random_patch()
-            # else:
-            random_patch = self._get_class_aware_patch()
+            #get a 10% probability to sample a background
+            if torch.rand(1).item() < 0.1:
+                random_patch = self.get_random_patch(do_i_want_background=True)
+            else:
+                random_patch = self._get_class_aware_patch()
 
             # We will split the labels into three
             random_patch = self._split_labels_into_three(random_patch)
@@ -172,7 +167,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         return int(self.get_original_segmentation().max() + 1)
 
-    def get_random_patch(self) -> np.ndarray:
+    def get_random_patch(self, do_i_want_background: bool = None) -> np.ndarray:
 
         seg = self.get_original_segmentation()
 
@@ -187,7 +182,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
         
         #The network need to see some background, so we will randomly flip the isMostBackground flag
         # with a probability of 0.25
-        do_i_want_background = torch.rand(1).item() < 0.25
+        if do_i_want_background is None:
+            do_i_want_background = torch.rand(1).item() < 0.25
 
         while isMostBackground:
             # Get random coordinates for the patch
@@ -212,7 +208,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 isMostBackground = not isMostBackground
 
         return segmentation_patch
-    
     
     def _get_class_aware_patch(self) -> np.ndarray:
 
@@ -314,6 +309,32 @@ class DataGenerator(torch.utils.data.IterableDataset):
         unique, counts = np.unique(seg, return_counts=True)
         frequencies = dict(zip(unique, counts / seg.size))
         return frequencies
+
+    def build_fg_only_ratios(self, seg_3d: np.ndarray, num_classes: int,
+                            alpha: float = 0.5, lam: float = 0.1, eps: float = 1e-8) -> list[float]:
+        """
+        Returns a length-C ratios vector with r[0]=0 and r[1:] normalized.
+        alpha ~ 0.4-0.6 is typical. lam adds a tiny uniform blend for stability.
+        """
+        uniq, cnt = np.unique(seg_3d, return_counts=True)
+        f = np.zeros(num_classes, dtype=np.float32)
+        f[uniq] = cnt / float(seg_3d.size)
+
+        r = np.zeros(num_classes, dtype=np.float32)
+        # inverse-sqrt on foreground only
+        r_fg = (1.0 / np.sqrt(np.maximum(f[1:], eps))) ** alpha
+        s = r_fg.sum()
+        if s > 0:
+            r[1:] = r_fg / s
+        else:
+            r[1:] = 1.0 / max(1, num_classes - 1)
+
+        if lam > 0:
+            u = np.full(num_classes, 1.0 / num_classes, dtype=np.float32)
+            r = (1 - lam) * r + lam * u
+            r[0] = 0.0                      # keep background at 0 for this branch
+            r[1:] /= r[1:].sum() + eps      # renormalize FG after zeroing bg
+        return r.tolist()
 
     # ---------------- test ----------------
 

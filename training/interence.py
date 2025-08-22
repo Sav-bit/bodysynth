@@ -21,11 +21,16 @@ import numpy as np
 import torch
 import nibabel as nib
 
+from training.train_util import zscore
 from unet3d.model import UNet3D
 from unet3d import utils
 from monai.inferers import sliding_window_inference
 from nibabel.orientations import axcodes2ornt
 from nibabel.orientations import ornt_transform
+from monai.transforms import (
+    Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd,
+    EnsureTyped, Invertd
+)
 
 
 def get_orientation(nii: nib.Nifti1Image) -> tuple[str, str, str]:
@@ -104,18 +109,42 @@ def main():
     device = get_device()
     print("Running on", device)
 
-    # 1. Load and normalise volume – keep exactly the preprocessing used during training!
-    img = nib.load(args.image_path)
-    if get_orientation(img) != ("P", "S", "R"):
-        print("Reorienting image to PSR orientation...")
-        # Reorient to PSR (Posterior-Superior-Right) orientation
-        # This is the same as Ernie Extended's orientation
-        # which is required for the model to work correctly
-        # as it was trained on images in this orientation.
-        img = reorient(img, "PSR")
-    vol = img.get_fdata().astype(np.float32)  # Load volume data as float32
-    vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
-    vol = (vol - vol.mean()) / (vol.std() + 1e-6)  # simple z‑score
+    # # 1. Load and normalise volume – keep exactly the preprocessing used during training!
+    # img = nib.load(args.image_path)
+    # if get_orientation(img) != ("P", "S", "R"):
+    #     print("Reorienting image to PSR orientation...")
+    #     # Reorient to PSR (Posterior-Superior-Right) orientation
+    #     # This is the same as Ernie Extended's orientation
+    #     # which is required for the model to work correctly
+    #     # as it was trained on images in this orientation.
+    #     img = reorient(img, "PSR")
+    # vol = img.get_fdata().astype(np.float32)  # Load volume data as float32
+    # vol_tensor = torch.from_numpy(vol[None, None]).to(device)  # → (1,1,D,H,W)
+    
+    infer_pre = Compose([
+        LoadImaged(keys="img"),
+        EnsureChannelFirstd(keys="img"),
+        Orientationd(keys="img", axcodes="PSR"),          # keep your PSR convention
+        Spacingd(keys="img", pixdim=(1.0,1.0,1.0), mode=("bilinear",)),  # resample to 1mm
+        EnsureTyped(keys="img"),
+    ])
+
+    batch = infer_pre({"img": args.image_path})
+    vol_tensor = batch["img"].to(device)                  # [1,1,D,H,W]
+    
+    # Check original spacing from the file on disk
+    orig_img = nib.load(args.image_path)
+    orig_zooms = np.array(orig_img.header.get_zooms()[:3], dtype=np.float32)
+
+    # If not ~1mm, save the standardized (PSR + 1mm) image for record
+    if not np.allclose(orig_zooms, (1.0, 1.0, 1.0), atol=1e-3):
+        std_np = batch["img"].cpu().numpy().squeeze(0).squeeze(0)  # [D,H,W]
+        std_aff = batch["img_meta_dict"]["affine"]                 # affine after Orientationd+Spacingd
+
+        std_path = Path(args.out_path).with_suffix("")  # base of your output seg path
+        std_path = std_path.parent / f"{std_path.stem}_PSR_1mm.nii.gz"
+        nib.save(nib.Nifti1Image(std_np.astype(np.float32), std_aff), str(std_path))
+        print(f"Saved standardized input (PSR+1mm) to: {std_path}")
 
     # 2. Load network
     model = load_model(Path(args.checkpoint), args.num_classes, device)
@@ -133,11 +162,12 @@ def main():
     # )
 
     with torch.no_grad():
+        def norm_predictor(x): return model(zscore(x))
         seg_probs = sliding_window_inference(
             inputs=vol_tensor,
             roi_size=patch_size,
             sw_batch_size=args.sw_batch_size,
-            predictor=model,
+            predictor=norm_predictor,
             overlap=0.5,  # 50% overlap
             mode="gaussian",
             device=device,
@@ -146,10 +176,15 @@ def main():
     seg = seg_probs.argmax(dim=1).squeeze(0).cpu().numpy()
 
     # 4. Save segmentation
-    out_img = nib.Nifti1Image(seg, img.affine, img.header)
-    nib.save(out_img, args.out_path)
-    print("Segmentation saved to", args.out_path)
-
+    # out_img = nib.Nifti1Image(seg, img.affine, img.header)
+    # nib.save(out_img, args.out_path)
+    # print("Segmentation saved to", args.out_path)
+    
+    # 4) save in PSR + 1mm using the CURRENT affine from the preprocessed image
+    std_affine = batch["img_meta_dict"]["affine"]      # affine after Orientationd+Spacingd
+    seg_img = nib.Nifti1Image(seg.astype(np.uint16), std_affine)
+    nib.save(seg_img, args.out_path)
+    print(f"Segmentation saved (PSR + 1mm) to {args.out_path}")
 
 if __name__ == "__main__":
     main()

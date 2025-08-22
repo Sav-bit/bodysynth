@@ -18,6 +18,7 @@ from training.train_util import (
     get_losses,
     merge_losses,
     save_checkpoint_state,
+    zscore,
 )
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -262,7 +263,7 @@ if __name__ == "__main__":
             images = images.to(device, non_blocking=True)
             segs = segs.to(device, non_blocking=True)
 
-            images = (images - images.mean()) / (images.std() + 1e-6)
+            images = zscore(images)
             
             # Forward pass
             prediction = model(images)
@@ -301,6 +302,7 @@ if __name__ == "__main__":
                 for val_images, val_segs in val_loader:
                     val_images = val_images.to(device)
                     val_segs = val_segs.to(device)
+                    val_images = zscore(val_images)
                     val_prediction = model(val_images)
                     val_loss = criterion(val_prediction, val_segs)
                     val_losses.append(val_loss.item())
@@ -309,7 +311,7 @@ if __name__ == "__main__":
                 wandb.log({"epoch": epoch + 1, "validation/loss": avg_val_loss})
                 validation_losses[epoch + 1] = avg_val_loss
                 # scheduler.step(avg_val_loss)                     
-                wandb.log({"lr": optimizer.param_groups[0]["lr"], "epoch": epoch + 1})
+                # wandb.log({"lr": optimizer.param_groups[0]["lr"], "epoch": epoch + 1})
 
             # ———————————— FREE UP GPU MEMORY BEFORE GOING BACK TO TRAIN ————————————
             # Delete the last‐used validation tensors so they drop out of scope:
