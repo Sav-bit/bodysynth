@@ -78,6 +78,9 @@ def get_losses(data_gen: DataGenerator = None) -> tuple:
         dice_weights = np.ones(data_gen.get_num_classes(), dtype=np.float32)
         dice_weights[0] = 0.0  # background class weight is zero
 
+    #TODO test
+    dice_weights = None
+
     dice_loss_config = {
         "loss": {
             "name": "DiceLoss",
@@ -136,6 +139,9 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alph
         s = 0 if step is None else step
         t = min(s / decay_steps, 1.0)
         alpha = alpha_start + (alpha_end - alpha_start) * t
+
+        #TODO test
+        alpha = 0.8
 
         # Optional logging
         if model is not None:
