@@ -139,6 +139,8 @@ def main():
     # If not ~1mm, save the standardized (PSR + 1mm) image for record
     if not np.allclose(orig_zooms, (1.0, 1.0, 1.0), atol=1e-3):
         std_np = batch["img"].cpu().numpy().squeeze(0)  # [D,H,W]
+        print(f"Shape of std_np: {std_np.shape}")
+        print(f"The keys of batch are: {batch.keys()}")
         std_aff = batch["img_meta_dict"]["affine"]                 # affine after Orientationd+Spacingd
 
         std_path = Path(args.out_path).with_suffix("")  # base of your output seg path
