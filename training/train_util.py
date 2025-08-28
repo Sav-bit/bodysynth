@@ -141,7 +141,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alph
         alpha = alpha_start + (alpha_end - alpha_start) * t
 
         #TODO test
-        alpha = 0.8
+        #alpha = 0.8
 
         # Optional logging
         if model is not None:
