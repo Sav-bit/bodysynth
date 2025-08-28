@@ -74,7 +74,7 @@ def load_model(checkpoint_path: Path, num_classes: int, device: torch.device) ->
         upsample="deconv",
         num_levels=5,
         dropout_prob=0.0,
-        is_segmentation=True,
+        is_segmentation=False,
         is3d=True,
     ).to(device)
 
@@ -126,12 +126,13 @@ def main():
         EnsureChannelFirstd(keys="img"),
         Orientationd(keys="img", axcodes="PSR"),          # keep your PSR convention
         Spacingd(keys="img", pixdim=(1.0,1.0,1.0), mode=("bilinear",)),  # resample to 1mm
-        EnsureTyped(keys="img"),
+        EnsureTyped(keys="img", track_meta=True),
     ])
 
     batch = infer_pre({"img": args.image_path})
-    print(f"Shape of img: {batch['img'].shape}")
-    vol_tensor = batch["img"].to(device)                  # [1,1,D,H,W]
+    img_mt = batch["img"]
+    print(f"Shape of img: {img_mt.shape}") #this is [1,D,H,W]
+    vol_tensor = img_mt.unsqueeze(0).to(device)                  # [1,1,D,H,W]
     
     # Check original spacing from the file on disk
     orig_img = nib.load(args.image_path)
@@ -139,10 +140,15 @@ def main():
 
     # If not ~1mm, save the standardized (PSR + 1mm) image for record
     if not np.allclose(orig_zooms, (1.0, 1.0, 1.0), atol=1e-3):
-        std_np = batch["img"].cpu().numpy().squeeze(0)  # [D,H,W]
+        std_np  = img_mt.cpu().numpy().squeeze(0)   # [D,H,W]
         print(f"Shape of std_np: {std_np.shape}")
-        print(f"The keys of batch are: {batch.keys()}")
-        std_aff = batch["img_meta_dict"]["affine"]                 # affine after Orientationd+Spacingd
+        # print(f"The keys of batch are: {batch.keys()}")
+        print(f"Meta keys of img_mt: {img_mt.meta.keys()}")
+        std_aff = img_mt.meta.get("affine", None)
+        if std_aff is None:
+            # very old MONAI fallback: try original_affine, then warn
+            std_aff = img_mt.meta.get("original_affine", np.eye(4))
+            print("WARN: 'affine' missing on MetaTensor; falling back to original_affine / I.")
 
         std_path = Path(args.out_path).with_suffix("")  # base of your output seg path
         std_path = std_path.parent / f"{std_path.stem}_PSR_1mm.nii.gz"
@@ -176,7 +182,7 @@ def main():
             device=device,
         )
 
-    seg = seg_probs.argmax(dim=1).squeeze(0).cpu().numpy()
+    seg = seg_probs.argmax(1).squeeze(0).cpu().numpy() 
 
     # 4. Save segmentation
     # out_img = nib.Nifti1Image(seg, img.affine, img.header)
@@ -184,9 +190,12 @@ def main():
     # print("Segmentation saved to", args.out_path)
     
     # 4) save in PSR + 1mm using the CURRENT affine from the preprocessed image
-    std_affine = batch["img_meta_dict"]["affine"]      # affine after Orientationd+Spacingd
-    seg_img = nib.Nifti1Image(seg.astype(np.uint16), std_affine)
-    nib.save(seg_img, args.out_path)
+    std_aff = img_mt.meta.get("affine", None)
+    if std_aff is None:
+        std_aff = img_mt.meta.get("original_affine", np.eye(4))
+        print("WARN: 'affine' missing on MetaTensor; using fallback.")
+
+    nib.save(nib.Nifti1Image(seg.astype(np.uint16), std_aff), args.out_path)
     print(f"Segmentation saved (PSR + 1mm) to {args.out_path}")
 
 if __name__ == "__main__":
