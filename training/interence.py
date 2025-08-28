@@ -130,6 +130,7 @@ def main():
     ])
 
     batch = infer_pre({"img": args.image_path})
+    print(f"Shape of img: {batch['img'].shape}")
     vol_tensor = batch["img"].to(device)                  # [1,1,D,H,W]
     
     # Check original spacing from the file on disk
