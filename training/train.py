@@ -193,7 +193,7 @@ if __name__ == "__main__":
     criterion = merge_losses(dice_loss, cross_entropy_loss, model)
 
     # Get the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     # The lossess here are a dict where keys are the epoch numbers and values are the losses
     train_losses = {}
