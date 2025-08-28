@@ -22,7 +22,7 @@ import torch
 import nibabel as nib
 
 from training.train_util import zscore
-from unet3d.model import UNet3D
+from unet3d.model import ResidualUNet3D, UNet3D
 from unet3d import utils
 from monai.inferers import sliding_window_inference
 from nibabel.orientations import axcodes2ornt
@@ -60,7 +60,7 @@ def get_device() -> torch.device:
 def load_model(checkpoint_path: Path, num_classes: int, device: torch.device) -> UNet3D:
     """Build the UNet architecture exactly as during training and load weights."""
 
-    model = UNet3D(
+    model = ResidualUNet3D(
         in_channels=1,
         out_channels=num_classes,
         f_maps=(32, 64, 128, 256, 512),
@@ -138,7 +138,7 @@ def main():
 
     # If not ~1mm, save the standardized (PSR + 1mm) image for record
     if not np.allclose(orig_zooms, (1.0, 1.0, 1.0), atol=1e-3):
-        std_np = batch["img"].cpu().numpy().squeeze(0).squeeze(0)  # [D,H,W]
+        std_np = batch["img"].cpu().numpy().squeeze(0)  # [D,H,W]
         std_aff = batch["img_meta_dict"]["affine"]                 # affine after Orientationd+Spacingd
 
         std_path = Path(args.out_path).with_suffix("")  # base of your output seg path
