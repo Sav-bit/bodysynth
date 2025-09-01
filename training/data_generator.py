@@ -59,7 +59,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
         )
         
 
-        ratios = self.build_fg_only_ratios(self.original_data, self.get_num_classes())
+        # ratios = self.build_fg_only_ratios(self.original_data, self.get_num_classes())
+        ratios = self.uniform_fg_ratios(self.get_num_classes(), bg_prob=0.0)
         
         print(f"Ratios: {ratios}")
 
@@ -336,6 +337,12 @@ class DataGenerator(torch.utils.data.IterableDataset):
             r[1:] /= r[1:].sum() + eps      # renormalize FG after zeroing bg
         return r.tolist()
 
+    def uniform_fg_ratios(self, num_classes: int, bg_prob: float = 0.0):
+        assert num_classes >= 2
+        r = np.zeros(num_classes, dtype=np.float32)
+        r[1:] = (1.0 - bg_prob) / (num_classes - 1)  # equal for classes 1..C-1
+        r[0] = bg_prob                                # keep 0 if you don’t want BG
+        return r.tolist()
     # ---------------- test ----------------
 
 if __name__ == "__main__":
