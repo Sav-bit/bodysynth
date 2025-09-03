@@ -8,3 +8,4 @@
 7   	  Cartilage           		   85 170 0 255
 8  	  Fat                    	   193 161 161 255
 9	  Air_conducts			   0 200 180 255 
+10	  ignore			    	   255 0 0 80
