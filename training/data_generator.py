@@ -26,6 +26,7 @@ class DataGenerator(torch.utils.data.IterableDataset):
     def __init__(
         self,
         seg_dir,
+        t1w_dir=None,
         out_center_str="image",
         patch_size=[128, 128, 128],
         padding: int = 22,
@@ -35,8 +36,9 @@ class DataGenerator(torch.utils.data.IterableDataset):
         self.device = device
         self.patch_size = patch_size
         self.padding = padding
+        self.original_t1w_dir = t1w_dir
 
-        self.original_data, self.affine = self.load_data()
+        self.original_seg, self.original_t1w, self.affine = self.load_data()
 
         # Since the memory is not enough to load the full image, we need to set the out_size
         # The idea here is to set the out_size as a little bit bigger than the patch size
@@ -66,32 +68,41 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
         # implementation of the class_crop
         self.class_crop = Compose([
-            # EnsureChannelFirstd(keys=["seg"]),
+            #EnsureChannelFirstd(keys=["seg", "t1w"], allow_missing_keys=True),
             RandCropByLabelClassesd(
-                keys=["seg"],                            # what to crop
+                keys=["seg", "t1w"],                            # what to crop
                 label_key="seg",                         # use seg to choose centers
                 spatial_size=out_size,                   # crop size BEFORE your padding-trim
                 ratios=ratios,                           # sampling preference per class id
                 num_classes=self.get_num_classes(),            # total classes in seg
                 num_samples=1                            # return a single crop (dict, not list)
             ),
-            ToTensord(keys=["seg"])                    
+            ToTensord(keys=["seg", "t1w"], allow_missing_keys=True),                    
         ])
 
-    def load_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """ Loads the segmentation data from the NIfTI file.
+    def load_data(self) -> Tuple[np.ndarray, np.ndarray | None, np.ndarray]:
+        """ Loads the segmentation and original t1w (if present) data from the NIfTI file.
         Returns:
-            Tuple[np.ndarray, np.ndarray]: A tuple containing the segmentation data and the affine transformation matrix.
+            Tuple[np.ndarray, np.ndarray | None, np.ndarray]: A tuple containing the segmentation data, original t1w data (if present), and the affine transformation matrix.
         """
 
         img = nib.load(self.seg_dir)
-        return img.get_fdata().astype(np.int64), img.affine
+        t1w = None
+        if self.original_t1w_dir is not None:
+            t1w = nib.load(self.original_t1w_dir)
+            assert img.shape == t1w.shape, "Segmentation and original image must have the same shape"
+            assert np.allclose(img.affine, t1w.affine), "Segmentation and original image must have the same affine"
+            t1w_data = t1w.get_fdata().astype(np.float32)
+            
+            print(f"Original T1w data shape: {t1w_data.shape}, min: {t1w_data.min()}, max: {t1w_data.max()}, mean: {t1w_data.mean()}, std: {t1w_data.std()}")
+        
+        return img.get_fdata().astype(np.int64), t1w_data, img.affine
 
     def get_original_segmentation(self) -> np.ndarray:
         """
         Returns the original segmentation data.
         """
-        return self.original_data
+        return self.original_seg
 
     def __iter__(self):
         """
@@ -101,19 +112,21 @@ class DataGenerator(torch.utils.data.IterableDataset):
             
             #get a 10% probability to sample a background
             if torch.rand(1).item() < 0.1:
-                random_patch = self.get_random_patch(do_i_want_background=True)
+                random_seg_patch, random_t1w_patch = self.get_random_patch(do_i_want_background=True)
             else:
-                random_patch = self._get_class_aware_patch()
+                random_seg_patch, random_t1w_patch = self._get_class_aware_patch()
 
             # We will split the labels into three
-            random_patch = self._split_labels_into_three(random_patch)
+            random_seg_patch = self._split_labels_into_three(random_seg_patch)
             
             # Convert the patch to a tensor and move it to the device
-            segmentation_patch = torch.tensor(random_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
+            segmentation_patch = torch.tensor(random_seg_patch, device=self.device, dtype=torch.int64).unsqueeze(0)
 
-            # Get a random patch from the original segmentation
-            # Then we will use the synthesizer to generate a new image from that patch
-            to_synth = dict(segmentation=segmentation_patch)
+            if random_t1w_patch is not None:
+                t1w_patch = torch.tensor(random_t1w_patch, device=self.device, dtype=torch.float32).unsqueeze(0)
+                to_synth = dict(segmentation=segmentation_patch, t1w=t1w_patch)
+            else:
+                to_synth = dict(segmentation=segmentation_patch)
 
             result = self.synth(to_synth, unpack=False)
 
@@ -122,8 +135,18 @@ class DataGenerator(torch.utils.data.IterableDataset):
 
             # This has size  (C, D, H, W)
             segmentation = result["seg"].to(torch.int64)
+            
+            #print(f"[DEBUGGING] Image background mean value: {image.squeeze(0)[(segmentation[0] == True)].mean()}")
+            
+            #If the generate image has the background white-ish color, we discard it and resample
+            if image.squeeze(0)[(segmentation[0] == True)].mean() > 0.6:
+                # print(f"[DEBUGGING] Discarding patch with white-ish background, mean value: {image.squeeze(0)[(segmentation[0] == True)].mean()}")
+                continue
+            
+            # If present, get the original t1w patch of size (C, D, H, W) where C is 1
+            t1w_patch = result.get("t1w", None)
 
-            # The problem is that now C is 37, so we need to collapse the channels into the 13 Ernie classes
+            # The problem is that now C is (numclasses-1) * 3 + 1, so we need to collapse the channels into the numclasses Ernie classes
             segmentation = self._collapse_triplet_channels(segmentation)
 
             if self.padding > 0:
@@ -144,6 +167,22 @@ class DataGenerator(torch.utils.data.IterableDataset):
                     sl,
                     sl,
                 ]
+                
+                #crop also the original t1w patch if present
+                if t1w_patch is not None:
+                    t1w_patch = t1w_patch[
+                        :,
+                        sl,
+                        sl,
+                        sl,
+                    ]
+
+            if t1w_patch is not None:
+                #Random alpha between 0.4 and 0.6
+                #alpha = torch.rand(1).item() * 0.2 + 0.4
+                alpha = 0.6
+                # print(f"[DEBUGGING] Alpha: {alpha}")
+                image = t1w_patch * (1 - alpha) + image * alpha
 
             yield image, segmentation
 
@@ -168,8 +207,17 @@ class DataGenerator(torch.utils.data.IterableDataset):
         """
         return int(self.get_original_segmentation().max() + 1)
 
-    def get_random_patch(self, do_i_want_background: bool = None) -> np.ndarray:
+    def get_random_patch(self, do_i_want_background: bool = False) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Returns a random patch from the original segmentation and T1w images.
 
+        Args:
+            do_i_want_background (bool, optional): If True, the patch will be mostly background.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray | None]: A tuple containing the segmentation patch and T1w patch.
+        """
+        
         seg = self.get_original_segmentation()
 
         # Get the shape of the image
@@ -180,11 +228,6 @@ class DataGenerator(torch.utils.data.IterableDataset):
         # calculate the total patch size
         # patch size + padding
         total_patch_size = [x + self.padding for x in self.patch_size]
-        
-        #The network need to see some background, so we will randomly flip the isMostBackground flag
-        # with a probability of 0.25
-        if do_i_want_background is None:
-            do_i_want_background = torch.rand(1).item() < 0.25
 
         while isMostBackground:
             # Get random coordinates for the patch
@@ -198,6 +241,15 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 w : w + total_patch_size[2],
             ]
 
+            t1w_patch = None
+
+            if self.original_t1w is not None:
+                t1w_patch = self.original_t1w[
+                    d : d + total_patch_size[0],
+                    h : h + total_patch_size[1],
+                    w : w + total_patch_size[2],
+                ]
+
             # Check if the segmentation_patch is mostly background
             isMostBackground = self._is_mostly_background(
                 segmentation_patch,
@@ -208,17 +260,24 @@ class DataGenerator(torch.utils.data.IterableDataset):
                 # If we want background, we will stop when the patch is mostly background
                 isMostBackground = not isMostBackground
 
-        return segmentation_patch
-    
-    def _get_class_aware_patch(self) -> np.ndarray:
+        return segmentation_patch, t1w_patch
+
+    def _get_class_aware_patch(self) -> tuple[np.ndarray, np.ndarray | None]:
 
         temp_seg = np.expand_dims(self.get_original_segmentation(), axis=0)
-
-        sample = self.class_crop({"seg": temp_seg})
+        temp_t1w = np.expand_dims(self.original_t1w, axis=0) if self.original_t1w is not None else None
         
-        seg_patch = sample[0]["seg"]
-    
-        return seg_patch.numpy().squeeze(0)
+        
+        dictionary = {"seg": temp_seg}
+        if temp_t1w is not None:
+            dictionary["t1w"] = temp_t1w
+
+        sample = self.class_crop(dictionary)
+
+        seg_patch = sample[0]["seg"].numpy().squeeze(0)
+        t1w_patch = sample[0]["t1w"].numpy().squeeze(0) if "t1w" in sample[0] else None
+
+        return seg_patch, t1w_patch
 
     def _collapse_triplet_channels(self, segC : torch.Tensor, k=3) -> torch.Tensor:
         """
