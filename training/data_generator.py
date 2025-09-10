@@ -61,8 +61,8 @@ class DataGenerator(torch.utils.data.IterableDataset):
         )
         
 
-        # ratios = self.build_fg_only_ratios(self.original_data, self.get_num_classes())
-        ratios = self.uniform_fg_ratios(self.get_num_classes(), bg_prob=0.0)
+        ratios = self.build_fg_only_ratios(self.original_seg, self.get_num_classes())
+        #ratios = self.uniform_fg_ratios(self.get_num_classes(), bg_prob=0.0)
         
         print(f"Ratios: {ratios}")
 

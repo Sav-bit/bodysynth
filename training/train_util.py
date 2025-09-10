@@ -44,7 +44,7 @@ def get_model(data_gen: DataLoader) -> AbstractUNet:
         conv_upscale=2,
         upsample="deconv",
         num_levels=5,
-        dropout_prob=0.1,
+        # dropout_prob=0.1,
         is_segmentation=False,
         is3d=True,
     )
@@ -141,7 +141,7 @@ def merge_losses(dice_loss, cross_entropy_loss, model: AbstractUNet = None, alph
         alpha = alpha_start + (alpha_end - alpha_start) * t
 
         #TODO test
-        alpha = 0.8
+        #alpha = 0.8
 
         # Optional logging
         if model is not None:
