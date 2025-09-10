@@ -28,6 +28,7 @@ def get_data_generator(
     batch_size: int,
     device: torch.device,
     num_workers: int,
+    t1w_path: str | None = None,
     patch_size: list = [128, 128, 128],
 ) -> DataLoader:
     """
@@ -42,6 +43,7 @@ def get_data_generator(
 
     data_gen = DataGenerator(
         seg_dir=seg_path,
+        t1w_dir=t1w_path,
         device=device,
         patch_size=patch_size,
         padding=10,
@@ -165,6 +167,7 @@ if __name__ == "__main__":
         device=device,
         num_workers=0,
         patch_size=patch_size,
+        t1w_path=val_path,
     )
 
     # If validation path is provided, get the validation data loader
