@@ -178,9 +178,9 @@ class DataGenerator(torch.utils.data.IterableDataset):
                     ]
 
             if t1w_patch is not None:
-                #Random alpha between 0.4 and 0.6
-                #alpha = torch.rand(1).item() * 0.2 + 0.4
-                alpha = 0.6
+                #Random alpha interval [0, 1)
+                alpha = 1 - torch.rand(1).item()
+                #alpha = 0.6
                 # print(f"[DEBUGGING] Alpha: {alpha}")
                 image = t1w_patch * (1 - alpha) + image * alpha
 
