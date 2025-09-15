@@ -195,7 +195,7 @@ def main():
         std_aff = img_mt.meta.get("original_affine", np.eye(4))
         print("WARN: 'affine' missing on MetaTensor; using fallback.")
 
-    nib.save(nib.Nifti1Image(seg.astype(np.uint16), std_aff), args.out_path)
+    nib.save(nib.Nifti1Image(seg.astype(np.uint8), std_aff), args.out_path)
     print(f"Segmentation saved (PSR + 1mm) to {args.out_path}")
 
 if __name__ == "__main__":
